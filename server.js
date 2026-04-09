@@ -1,5 +1,10 @@
-process.on('uncaughtException', (err) => { console.error('UNCAUGHT:', err.message); });
-process.on('unhandledRejection', (err) => { console.error('UNHANDLED:', err); });
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT:', err.message);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('UNHANDLED:', err);
+});
 
 require('dotenv').config();
 
@@ -9,16 +14,21 @@ const https = require('https');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+const publicDir = path.join(__dirname, 'public');
 
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(publicDir));
+
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(publicDir, 'index.html'));
+});
 
 app.post('/api/chat', (req, res) => {
   try {
     const apiKey = process.env.ZHIPU_API_KEY;
     if (!apiKey || !String(apiKey).trim()) {
       if (!res.headersSent) {
-        res.status(503).json({ error: 'ZHIPU_API_KEY 未配置，请在环境变量中设置' });
+        res.status(503).json({ error: 'ZHIPU_API_KEY 未配置，请在环境变量中设置。' });
       }
       return;
     }
@@ -31,7 +41,7 @@ app.post('/api/chat', (req, res) => {
       messages,
       stream: isStream,
       temperature: 0.7,
-      max_tokens: 8192
+      max_tokens: 8192,
     });
 
     const options = {
@@ -41,49 +51,65 @@ app.post('/api/chat', (req, res) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Length': Buffer.byteLength(postData)
-      }
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Length': Buffer.byteLength(postData),
+      },
     };
 
     const apiReq = https.request(options, (apiRes) => {
       if (apiRes.statusCode !== 200) {
         let errBody = '';
-        apiRes.on('data', c => errBody += c);
-        apiRes.on('end', () => res.status(apiRes.statusCode).json({ error: errBody }));
+        apiRes.on('data', (chunk) => {
+          errBody += chunk;
+        });
+        apiRes.on('end', () => {
+          res.status(apiRes.statusCode).json({ error: errBody });
+        });
         return;
       }
+
       if (isStream) {
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
         res.setHeader('X-Accel-Buffering', 'no');
         apiRes.pipe(res);
-      } else {
-        let body = '';
-        apiRes.on('data', c => body += c);
-        apiRes.on('end', () => {
-          res.setHeader('Content-Type', 'application/json');
-          res.send(body);
-        });
+        return;
       }
+
+      let body = '';
+      apiRes.on('data', (chunk) => {
+        body += chunk;
+      });
+      apiRes.on('end', () => {
+        res.setHeader('Content-Type', 'application/json');
+        res.send(body);
+      });
     });
 
     apiReq.on('error', (err) => {
       console.error('API request error:', err.message);
-      if (!res.headersSent) res.status(500).json({ error: err.message });
+      if (!res.headersSent) {
+        res.status(500).json({ error: err.message });
+      }
     });
 
     apiReq.write(postData);
     apiReq.end();
-  } catch (e) {
-    console.error('Server error:', e.message);
-    if (!res.headersSent) res.status(500).json({ error: e.message });
+  } catch (err) {
+    console.error('Server error:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
   }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n🚀 WeMoreAI 智能虚拟实验生成平台`);
-  console.log(`   本地访问: http://localhost:${PORT}`);
-  console.log(`   按 Ctrl+C 停止服务\n`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log('\nWeMoreAI 智能虚拟实验生成平台');
+    console.log(`   本地访问: http://localhost:${PORT}`);
+    console.log('   按 Ctrl+C 停止服务\n');
+  });
+}
+
+module.exports = app;
