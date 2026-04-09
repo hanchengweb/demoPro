@@ -1,20 +1,28 @@
 process.on('uncaughtException', (err) => { console.error('UNCAUGHT:', err.message); });
 process.on('unhandledRejection', (err) => { console.error('UNHANDLED:', err); });
 
+require('dotenv').config();
+
 const express = require('express');
 const path = require('path');
 const https = require('https');
 
 const app = express();
-const PORT = 3000;
-
-const ZHIPU_API_KEY = '86008ef6d11a42328873bcb5646ce071.z7Kqc6VLVk1gfbSb';
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname)));
 
 app.post('/api/chat', (req, res) => {
   try {
+    const apiKey = process.env.ZHIPU_API_KEY;
+    if (!apiKey || !String(apiKey).trim()) {
+      if (!res.headersSent) {
+        res.status(503).json({ error: 'ZHIPU_API_KEY 未配置，请在环境变量中设置' });
+      }
+      return;
+    }
+
     const { model, messages, stream } = req.body;
     const isStream = stream !== false;
 
@@ -33,7 +41,7 @@ app.post('/api/chat', (req, res) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${ZHIPU_API_KEY}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Length': Buffer.byteLength(postData)
       }
     };
