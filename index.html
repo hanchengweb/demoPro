@@ -289,6 +289,11 @@
           <div class="flex-1">
             <textarea id="prompt-input" rows="2" placeholder="简单描述你想要的虚拟实验，例如：单摆运动仿真" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-all placeholder:text-slate-400"></textarea>
           </div>
+          <input id="asset-input" type="file" accept="image/*,.txt,.md,.html,.json,.csv,.js,.ts,.css" multiple class="hidden" onchange="handleAssetSelection(event)">
+          <button onclick="triggerAssetUpload()" class="px-4 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:border-indigo-300 hover:text-indigo-600 transition-all flex items-center gap-2 whitespace-nowrap">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+            素材
+          </button>
           <button id="optimize-btn" onclick="handleOptimizePrompt()" class="px-5 py-3 bg-indigo-100 text-indigo-600 rounded-xl text-sm font-medium hover:bg-indigo-200 transition-all flex items-center gap-2 whitespace-nowrap">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
             优化提示词
@@ -314,6 +319,7 @@
           </button>
         </div>
         
+        <div id="asset-list" class="hidden mt-3 flex flex-wrap gap-2"></div>
         <!-- Quick prompts -->
         <div id="quick-prompts" class="flex flex-wrap gap-2 mt-3"></div>
         <!-- Category tags -->
@@ -572,76 +578,198 @@ const EXAMPLES = [
   { id:'24', title:'供需均衡', category:'economics', desc:'市场供需关系仿真', prompt:'创建供需均衡仿真，显示供给曲线和需求曲线，可调节价格和数量' }
 ];
 
-const SYSTEM_PROMPT = `你是一个专业的虚拟仿真实验生成专家。你的任务是根据用户的自然语言描述，生成完整的、可运行的单文件 HTML 虚拟仿真实验。
+const MODEL_PREFERENCE = {
+  optimize: ['premium'],
+  spec: ['premium'],
+  generate: ['premium'],
+  review: ['premium'],
+  repair: ['premium']
+};
 
-## 生成规范
+const STAGE_CONFIG = {
+  optimize: { max_tokens: 1600, timeout: 45000, thinking: { type: 'disabled' } },
+  spec: { max_tokens: 2800, timeout: 50000, thinking: { type: 'disabled' } },
+  fastGenerate: { max_tokens: 8200, timeout: 150000, thinking: { type: 'disabled' } },
+  generate: { max_tokens: 9800, timeout: 180000, thinking: { type: 'disabled' } },
+  directGenerate: { max_tokens: 12000, timeout: 240000, thinking: { type: 'disabled' } },
+  review: { max_tokens: 1800, timeout: 25000, thinking: { type: 'disabled' } },
+  repair: { max_tokens: 12000, timeout: 150000, thinking: { type: 'disabled' } }
+};
 
-1. **单文件 HTML**：所有代码（HTML、CSS、JavaScript）必须内联在一个文件中，代码量不少于 3000 字符，确保内容充实、功能完整
+const GENERATION_POLICY = {
+  preferLeanFlow: true,
+  skipRemoteReview: true,
+  allowRepairOnlyWhenBroken: true
+};
 
-2. **技术栈**：
-   - **优先使用 SVG 绘制图形**（比 Canvas 更清晰、可缩放、易交互）
-   - 使用 Tailwind CSS (CDN引入: <script src="https://cdn.tailwindcss.com"><\/script>) 进行样式设计
-   - 动画使用 CSS animation 或 requestAnimationFrame
-   - 数据可视化可使用 Chart.js (CDN引入)
+const PROMPT_OPTIMIZER_SYSTEM = `你是高端虚拟仿真案例策划专家。
 
-3. **SVG 图形规范**（重点）：
-   - 使用 <svg viewBox="0 0 width height"> 定义坐标系
-   - **必须使用渐变填充**：linearGradient（线性渐变）或 radialGradient（径向渐变）
-   - **禁止大面积纯色填充**，所有形状必须使用渐变增加立体感
-   - 渐变定义放在 <defs> 中，多色渐变 stop 至少 2-3 个颜色
-   - 基础形状：
-     * <rect x="" y="" width="" height="" rx="" ry=""/> 矩形（圆角用rx/ry）
-     * <circle cx="" cy="" r=""/> 圆形
-     * <ellipse cx="" cy="" rx="" ry=""/> 椭圆
-     * <line x1="" y1="" x2="" y2=""/> 线段
-     * <path d="M x y L x y ..."/> 路径（M=移动,L=直线,C=曲线）
-   - 动画方式：
-     * CSS: transition, @keyframes
-     * JS: requestAnimationFrame 更新 transform 或 cx/cy 等属性
-     * 不推荐 SMIL (<animate>)
-   - 样式：用 class 引用 Tailwind 或内联 style
-   - 交互：给 SVG 元素加 onclick、addEventListener
-   - 文本：<text x="" y="" text-anchor="middle">文字</text>
-   - 组：<g transform="translate(x,y)">包裹多个元素整体变换</g>
+你的任务是把用户一句话需求，改写成更容易生成高质量成品案例的中文提示词。
 
-4. **布局规范**：
-   - **推荐三栏布局**：
-     * 左侧（20-25%）：参数控制面板，滑块、按钮、输入框
-     * 中间（50-60%）：SVG 仿真区，核心可视化区域
-     * 右侧（20-25%）：实时数据面板，数值显示、图表、状态指示
-   - 使用 flex 或 grid 实现响应式三栏布局
-   - 各栏之间有明显分隔线或背景色区分
+输出要求：
+1. 只输出优化后的提示词正文，不要解释，不要加标题。
+2. 保持用户原意，不擅自更换学科方向。
+3. 自动补足这几类信息：核心目标、核心现象、关键参数、交互方式、动画重点、数据反馈、视觉风格。
+4. 提示词必须强调成品感、精致度、动画表现力和交互反馈，不要写成长篇说明书。
+5. 页面中的文字要克制，优先用图形、动画、状态和数据表达，但允许保留必要的教学文字、互动规则、步骤提示和悬浮信息卡，文字必须短、准、服务教学。
+6. 要主动判断案例更适合哪种表现方式：原生 Canvas、PixiJS、SVG、Chart.js，只有在步骤任务型训练场景下才允许轻量使用 Phaser。
+7. 不允许出现原型化话术、演示稿口吻、教程浮层、体验引导废话，但允许真实教学场景需要的简洁说明文字。
+8. 优先鼓励轻量教学互动小游戏，例如识别、匹配、校准、排序、判断、拖拽。
+9. 语气简洁专业，控制在 180-260 字。`;
 
-5. **动画要求**（强制）：
-   - **关键元素必须有动画效果**，完全静态的页面不合格
-   - 推荐动画类型：
-     * 脉动动画（pulse）：心跳式缩放，用于重要节点或信号
-     * 流动动画（flow）：虚线流动、粒子移动，用于表示能量/物质传输
-     * 旋转动画（rotate）：齿轮、循环过程
-     * 闪烁动画（glow）：发光效果，用于高亮或警告
-     * 位移动画：物体运动、波形传播
-   - 使用 CSS @keyframes 定义动画，animation 属性控制
-   - 动画要有意义，与物理/化学/生物过程对应
+const SPEC_SYSTEM_PROMPT = `你是虚拟仿真实验产品架构师。
 
-6. **UI风格**：明亮主题，专业科研感
-   - 背景色：渐变浅色背景（蓝白、青白渐变）
-   - 强调色：蓝色/青色系
-   - 文字：深色，清晰可读
-   - 卡片式布局，圆角，阴影
+请把用户需求拆成一个严格可执行的实验规格 JSON，用于后续生成高质量单文件 HTML。
 
-7. **交互功能**：
-   - 参数实时调节（滑块、输入框）
-   - 播放/暂停/重置控制
-   - 数据实时显示和图表
-   - SVG 元素可点击、悬停提示
+只输出合法 JSON，不要 markdown，不要解释。
 
-8. **响应式**：适配不同屏幕尺寸
+JSON 结构：
+{
+  "title": "实验标题",
+  "summary": "一句话说明",
+  "subject": "学科",
+  "scene": "核心实验场景",
+  "teachingGoals": ["目标1", "目标2"],
+  "corePhenomena": ["现象1", "现象2"],
+  "controls": [
+    { "name": "参数名", "type": "slider|number|select|toggle|button", "purpose": "作用", "range": "范围或选项" }
+  ],
+  "visualModules": ["仿真主画面", "实时数据卡片", "趋势图或状态区"],
+  "interactions": ["播放/暂停/重置", "参数变化后即时反馈", "关键状态切换"],
+  "dataFeedback": ["关键数值", "趋势曲线", "状态提示"],
+  "styleStrategy": {
+    "visualStyle": "对应案例的视觉风格",
+    "paletteMood": "配色气质",
+    "textDensity": "minimal|compact",
+    "motionDensity": "high|medium",
+    "referenceKeywords": ["3-5个风格关键词"]
+  },
+  "renderStrategy": {
+    "primaryRenderer": "canvas|pixi|svg|hybrid|phaser",
+    "fallbackRenderer": "canvas|svg",
+    "animationStyle": "mechanism|particle|flow|trajectory|process|task",
+    "gameFeel": "none|light",
+    "recommendedLibraries": ["PixiJS", "Chart.js"],
+    "reason": "为什么这样选"
+  },
+  "simulationModel": {
+    "stateVariables": ["状态量1", "状态量2"],
+    "derivedMetrics": ["派生指标1", "派生指标2"],
+    "updateRules": ["参数变化如何驱动状态、动画和数据变化"]
+  },
+  "qualityBar": [
+    "界面必须完整可运行",
+    "动画必须与实验过程相关且足够明显",
+    "参数调节后画面和数据同步变化",
+    "页面文案必须克制，避免冗长文字提示",
+    "代码必须为单文件 HTML",
+    "不要出现原型式提示语、引导浮层或占位说明"
+  ]
+}`;
 
-9. **代码质量**：注释清晰，变量命名规范，逻辑清晰，代码量 >= 3000 字符
+const HTML_SYSTEM_PROMPT = `你是顶级虚拟仿真实验前端工程师。你要根据给定实验规格，生成成品级单文件 HTML。
 
-## 输出格式
+硬性要求：
+1. 只输出完整 HTML，以 <!DOCTYPE html> 开头。
+2. 所有 HTML、CSS、JavaScript 内联在一个文件中。
+3. 页面必须可以直接在浏览器本地打开运行。
+4. 只允许使用 premium Kimi 路线擅长的高质量前端实现，优先做精致、精细、强动画的成品页面。
+5. 必须严格遵守 styleStrategy 和 renderStrategy，不同案例必须生成不同视觉风格，不能一套皮肤跑所有学科。
+6. 适合连续动画、粒子、流体、轨迹、机制演化的场景，优先用 Canvas 或 PixiJS；适合结构示意和几何表达的场景再用 SVG；只有步骤任务型训练才允许轻量 Phaser。
+7. 如果使用 PixiJS 或 Phaser，只能作为渲染与交互引擎，教学逻辑、参数逻辑、数据逻辑必须独立、清晰、可信。
+8. 动画必须足量、连续、顺滑、与案例机制强相关，不能只有轻飘飘的过渡效果。
+9. 页面文字必须少而准，禁止大段说明、长提示区、啰嗦教学文案；更多用图像、动画、数据和短标签表达。
+10. 控件文案、数据文案、图示文案全部用中文，但每块文字尽量短，优先单行或双行。
+11. 页面必须精致，有明确层次、细节、阴影、材质、节奏感，不能做成粗糙面板拼接。
+12. 代码要有必要注释，变量命名清晰，不能写成原型页、示意稿或半成品 demo。
+13. 最终代码长度要足够充实，不能只有空壳界面。
+14. 不要输出解释，不要使用 markdown 代码块。
 
-直接输出完整的 HTML 代码，以 <!DOCTYPE html> 开头，不要添加任何额外的说明文字或 markdown 代码块标记。`;
+质量重点：
+- 参数变化必须驱动画面、状态、数据同步变化
+- 画面风格必须跟案例主题匹配
+- 优先生成可运行的高质量仿真动画，而不是说明性页面
+- 不允许出现“点击这里体验”“拖动查看原型”“交互提示”“教学说明”等原型化或啰嗦提示语
+- 如果带轻任务反馈，只能服务教学目标，不允许娱乐化跑偏`;
+
+const COMPACT_HTML_SYSTEM_PROMPT = `You are a senior front-end engineer for interactive education cases.
+
+Return only one complete standalone HTML file that starts with <!DOCTYPE html>.
+
+Hard rules:
+1. Single-file HTML only, with inline CSS and JavaScript.
+2. Run directly in a browser with no build step.
+3. Follow the provided spec exactly, especially styleStrategy and renderStrategy.
+4. Produce a finished case, not a prototype, tutorial page, or placeholder demo.
+5. Use concise Chinese UI labels and keep page copy minimal.
+6. Do not include onboarding text, teaching overlays, click hints, 操作说明, 交互提示, or similar prompt-like copy.
+7. Every control must visibly affect animation, state, and data.
+8. Prefer compact, production-ready code. Avoid repeated CSS, repeated components, and unnecessary wrappers.
+9. Prefer native Canvas/SVG with vanilla JavaScript. Only use PixiJS or Chart.js when they clearly improve the final result.
+10. Keep the result efficient: polished, animated, interactive, but not bloated.
+
+Quality target:
+- smooth continuous animation
+- strong visual finish
+- clear parameter feedback
+- theme aligned to the case
+- immediately deliverable final HTML`;
+
+const DIRECT_KIMI_CASE_SYSTEM_PROMPT = `你是顶级虚拟仿真教育案例前端工程师。
+
+你的任务是直接根据用户输入的中文需求，生成最终可交付的单文件 HTML。
+
+必须遵守：
+1. 只输出完整 HTML，以 <!DOCTYPE html> 开头，不要 markdown，不要解释。
+2. 所有 CSS 和 JavaScript 都内联在同一个 HTML 文件里。
+3. 页面必须直接可运行，包含真实动画、真实交互、真实状态反馈。
+4. 视觉必须精致、精细、有成品感，不要做成原型页、说明页、演示稿。
+5. 文案克制，避免大段废话和原型式提示语，但允许必要的教学文字、互动规则、步骤提示和 hover 知识点提示卡。
+6. 优先使用原生 Canvas、SVG、原生 JavaScript；只有明显必要时再引入轻量库。
+7. 控件变化必须立刻驱动画面、数据、状态同步变化。
+8. 根据案例主题自动匹配风格，不同案例不要一套皮肤。
+9. 如果用户需求适合游戏式动画，可以借鉴 2D 游戏的表现力，但不能偏离教学主题，不能娱乐化失焦。
+10. 对核心模型、器官、结构或机制节点，优先提供鼠标悬浮后的短提示卡，提示必须短、准、专业。
+11. 如果案例适合，应优先考虑加入轻量教学互动小游戏，例如识别、校准、排序、拖拽匹配、流程判断、Answer Game 式头脑风暴互动，但只能服务教学目标。
+12. 资源策略必须稳健：
+- 默认优先原生 Canvas、SVG、CSS、原生 JavaScript。
+- 允许使用稳定 CDN 的 PixiJS 或 Chart.js，但只有明显提升效果时才引入。
+- 图标优先内联 SVG 风格，参考 Lucide、Tabler、Heroicons 这类克制现代风格。
+- 不要依赖随机第三方图片热链、临时纹理站点、易失效素材地址。
+- 如需游戏感素材，优先借鉴 Kenney 的风格特征，但不要默认外链其资源文件。
+- 如需仿 3D 效果，优先用 2D 光影、分层、渐变、透视和动态来模拟，而不是强依赖重型 3D 资源。
+13. 审美方向必须高级、克制、专业，并带一点游戏工程师式的趣味和反馈感。
+14. 输出要偏成品，不要加入你自己的分析过程。`;
+
+const REVIEW_SYSTEM_PROMPT = `你是虚拟仿真实验质量审查员。
+
+请审查“实验规格”和“生成出的 HTML”是否匹配。
+
+只输出合法 JSON：
+{
+  "pass": true,
+  "score": 0-100,
+  "issues": ["问题1", "问题2"],
+  "fixes": ["修复建议1", "修复建议2"]
+}
+
+重点检查：
+1. 是否是完整 HTML
+2. 是否存在核心交互、强动画和实时反馈
+3. 是否符合实验规格与 renderStrategy/styleStrategy
+4. 是否足够精致，而不是粗糙拼接或半成品 demo
+5. 是否有明显缺失、占位文案、空白区域或静态假交互
+6. 是否出现原型页提示语、教学引导浮层、点击提示、体验引导或冗长说明
+7. 是否页面文字过多，压过了画面、动画与数据表达`;
+
+const REPAIR_SYSTEM_PROMPT = `你是高级前端修复工程师。
+
+请基于实验规格和审查问题，修复已有 HTML。
+
+要求：
+1. 只输出修复后的完整 HTML，以 <!DOCTYPE html> 开头。
+2. 保留已有可用部分，重点补齐交互、数据反馈和视觉层次，去掉原型式提示语。
+3. 不要解释，不要 markdown。`;
 
 // ===== STATE =====
 let state = {
@@ -659,12 +787,21 @@ let state = {
     { id:'2', username:'teacher', password:'123456', name:'张老师', role:'teacher', college:'医学院' }
   ],
   activeCaseTab: 'my',
-  exampleFilter: 'all'
+  exampleFilter: 'all',
+  modelCatalog: [],
+  defaultPreset: 'premium',
+  uploadedAssets: []
 };
 
 // ===== STORAGE =====
 function saveState() {
-  const toSave = { history: state.history, userCases: state.userCases, schoolCases: state.schoolCases, userList: state.userList };
+  const toSave = {
+    history: state.history,
+    userCases: state.userCases,
+    schoolCases: state.schoolCases,
+    userList: state.userList,
+    defaultPreset: state.defaultPreset
+  };
   localStorage.setItem('wemoreai_state', JSON.stringify(toSave));
 }
 
@@ -676,44 +813,611 @@ function loadState() {
       state.userCases = saved.userCases || [];
       state.schoolCases = saved.schoolCases || [];
       state.userList = saved.userList || state.userList;
+      state.defaultPreset = saved.defaultPreset || state.defaultPreset;
     }
   } catch(e) {}
 }
 
-// ===== API =====
-async function generateExperiment(prompt, category, onChunk, onDone, onError) {
+const TEXT_ASSET_EXTENSIONS = ['txt', 'md', 'html', 'json', 'csv', 'js', 'ts', 'css'];
+const MAX_IMAGE_SIZE = 4 * 1024 * 1024;
+const MAX_TEXT_SIZE = 200 * 1024;
+const MAX_TEXT_CHARS = 12000;
+
+function triggerAssetUpload() {
+  const input = document.getElementById('asset-input');
+  if (input) input.click();
+}
+
+function renderAssetList() {
+  const el = document.getElementById('asset-list');
+  if (!el) return;
+
+  if (!state.uploadedAssets.length) {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+
+  el.classList.remove('hidden');
+  el.innerHTML = state.uploadedAssets.map((asset) => `
+    <span class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+      <span>${asset.kind === 'image' ? '图片' : '文件'}</span>
+      <span class="max-w-[160px] truncate">${asset.name}</span>
+      <button onclick="removeAsset('${asset.id}')" class="text-slate-400 hover:text-rose-500 transition-colors">×</button>
+    </span>
+  `).join('');
+}
+
+function removeAsset(id) {
+  state.uploadedAssets = state.uploadedAssets.filter((asset) => asset.id !== id);
+  renderAssetList();
+}
+
+function getFileExtension(name = '') {
+  const parts = name.split('.');
+  return parts.length > 1 ? parts.pop().toLowerCase() : '';
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error(`读取文件失败：${file.name}`));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function normalizeAsset(file) {
+  if (file.type.startsWith('image/')) {
+    if (file.size > MAX_IMAGE_SIZE) {
+      throw new Error(`图片过大：${file.name}`);
+    }
+
+    return {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      kind: 'image',
+      name: file.name,
+      mimeType: file.type,
+      dataUrl: await readFileAsDataUrl(file)
+    };
+  }
+
+  const extension = getFileExtension(file.name);
+  if (!TEXT_ASSET_EXTENSIONS.includes(extension)) {
+    throw new Error(`暂只支持图片和文本类文件：${file.name}`);
+  }
+
+  if (file.size > MAX_TEXT_SIZE) {
+    throw new Error(`文件过大：${file.name}`);
+  }
+
+  const text = (await file.text()).slice(0, MAX_TEXT_CHARS);
+  return {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    kind: 'text',
+    name: file.name,
+    mimeType: file.type || 'text/plain',
+    text
+  };
+}
+
+async function handleAssetSelection(event) {
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+
   try {
-    const catInfo = CATEGORIES.find(c => c.id === category);
-    const categoryHint = catInfo ? `学科领域：${catInfo.name}。${catInfo.desc}。` : '';
+    for (const file of files.slice(0, 4)) {
+      const asset = await normalizeAsset(file);
+      state.uploadedAssets.push(asset);
+    }
+    renderAssetList();
+  } catch (error) {
+    alert(error.message || '素材读取失败');
+  } finally {
+    event.target.value = '';
+  }
+}
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+function buildDirectUserContent(prompt, category) {
+  const categoryHint = getCategoryContext(category);
+  const textAssets = state.uploadedAssets.filter((asset) => asset.kind === 'text');
+  const imageAssets = state.uploadedAssets.filter((asset) => asset.kind === 'image');
+  const textBlocks = [`${categoryHint}\n用户需求：${prompt}`];
 
+  if (textAssets.length) {
+    textBlocks.push(`以下是用户上传的参考文件内容，请理解后直接用于生成：\n${textAssets.map((asset) => `【${asset.name}】\n${asset.text}`).join('\n\n')}`);
+  }
+
+  if (!imageAssets.length) {
+    return `${textBlocks.join('\n\n')}\n\n直接输出最终可运行的高质量单文件 HTML。`;
+  }
+
+  return [
+    { type: 'text', text: `${textBlocks.join('\n\n')}\n\n以下还附带参考图片，请结合视觉结构、核心对象和教学重点，直接输出最终可运行的高质量单文件 HTML。` },
+    ...imageAssets.map((asset) => ({
+      type: 'image_url',
+      image_url: { url: asset.dataUrl }
+    }))
+  ];
+}
+
+function getCategoryContext(category) {
+  const catInfo = CATEGORIES.find(c => c.id === category);
+  if (!catInfo) return '';
+  return `学科领域：${catInfo.name}。领域说明：${catInfo.desc}。`;
+}
+
+function inferRenderStrategy(prompt = '', category = '') {
+  const hasTaskFlow = /步骤|流程|训练|操作|决策|任务|闯关|考核|应急|演练/.test(prompt);
+  const hasDynamicMechanism = /粒子|流体|循环|轨迹|传播|波|碰撞|病理|分子|血液|电流|运动|星体|天气|生态|呼吸/.test(prompt);
+  const hasChartBias = /统计|分布|函数|曲线|经济|概率|趋势|回归|数据/.test(prompt);
+
+  if (hasTaskFlow) {
+    return {
+      primaryRenderer: 'phaser',
+      fallbackRenderer: 'canvas',
+      animationStyle: 'light-game',
+      gameFeel: 'light',
+      recommendedLibraries: ['Phaser', 'Chart.js'],
+      reason: '该案例强调步骤反馈与任务化交互，适合轻游戏化，但仍应以教学流程为主。'
+    };
+  }
+
+  if (hasDynamicMechanism || ['medicine', 'biology', 'physics', 'engineering', 'electronics', 'geography', 'chemistry'].includes(category)) {
+    return {
+      primaryRenderer: 'canvas',
+      fallbackRenderer: 'svg',
+      animationStyle: 'mechanism',
+      gameFeel: 'none',
+      recommendedLibraries: ['PixiJS', 'Chart.js'],
+      reason: '该案例更适合连续动画、粒子、流动或机制演化，优先使用 Canvas，复杂场景可升级为 PixiJS。'
+    };
+  }
+
+  if (hasChartBias || ['mathematics', 'economics', 'psychology'].includes(category)) {
+    return {
+      primaryRenderer: 'hybrid',
+      fallbackRenderer: 'svg',
+      animationStyle: 'process',
+      gameFeel: 'none',
+      recommendedLibraries: ['SVG', 'Chart.js'],
+      reason: '该案例更强调图形表达、过程解释与数据反馈，适合 SVG 与图表混合呈现。'
+    };
+  }
+
+  return {
+    primaryRenderer: 'hybrid',
+    fallbackRenderer: 'canvas',
+    animationStyle: 'process',
+    gameFeel: 'none',
+    recommendedLibraries: ['Canvas', 'Chart.js'],
+    reason: '保持通用渲染策略，优先保障动画、交互和教学信息表达的平衡。'
+  };
+}
+
+function inferStyleStrategy(prompt = '', category = '') {
+  if (/医学|病理|血液|呼吸|细胞|药代/.test(prompt) || category === 'medicine' || category === 'biology') {
+    return {
+      visualStyle: 'clinical-dashboard',
+      paletteMood: 'clean-cyan-red',
+      textDensity: 'minimal',
+      motionDensity: 'high',
+      referenceKeywords: ['洁净医学', '器官动画', '监护面板', '冷光质感']
+    };
+  }
+
+  if (/轨迹|运动|力学|抛体|电路|工程|机械|流体/.test(prompt) || ['physics', 'engineering', 'electronics'].includes(category)) {
+    return {
+      visualStyle: 'precision-lab',
+      paletteMood: 'blue-amber',
+      textDensity: 'minimal',
+      motionDensity: 'high',
+      referenceKeywords: ['工程仪表', '轨迹发光', '精密实验', '动态网格']
+    };
+  }
+
+  if (/地理|生态|循环|天气|天文/.test(prompt) || ['geography', 'environmental'].includes(category)) {
+    return {
+      visualStyle: 'immersive-system',
+      paletteMood: 'teal-green',
+      textDensity: 'compact',
+      motionDensity: 'high',
+      referenceKeywords: ['系统循环', '环境光层次', '地图感', '沉浸动画']
+    };
+  }
+
+  if (/数学|统计|经济|心理/.test(prompt) || ['mathematics', 'economics', 'psychology'].includes(category)) {
+    return {
+      visualStyle: 'editorial-data',
+      paletteMood: 'ink-blue',
+      textDensity: 'compact',
+      motionDensity: 'medium',
+      referenceKeywords: ['数据排版', '信息图', '清晰曲线', '克制高级']
+    };
+  }
+
+  return {
+    visualStyle: 'premium-interactive',
+    paletteMood: 'adaptive',
+    textDensity: 'minimal',
+    motionDensity: 'high',
+    referenceKeywords: ['高端产品', '强反馈', '轻说明', '细节丰富']
+  };
+}
+
+function normalizeSpec(spec, prompt, category) {
+  const inferred = inferRenderStrategy(prompt, category);
+  const inferredStyle = inferStyleStrategy(prompt, category);
+  const renderStrategy = typeof spec.renderStrategy === 'object' && spec.renderStrategy ? spec.renderStrategy : {};
+  const styleStrategy = typeof spec.styleStrategy === 'object' && spec.styleStrategy ? spec.styleStrategy : {};
+  const simulationModel = typeof spec.simulationModel === 'object' && spec.simulationModel ? spec.simulationModel : {};
+
+  spec.styleStrategy = {
+    visualStyle: styleStrategy.visualStyle || inferredStyle.visualStyle,
+    paletteMood: styleStrategy.paletteMood || inferredStyle.paletteMood,
+    textDensity: styleStrategy.textDensity || inferredStyle.textDensity,
+    motionDensity: styleStrategy.motionDensity || inferredStyle.motionDensity,
+    referenceKeywords: Array.isArray(styleStrategy.referenceKeywords) && styleStrategy.referenceKeywords.length
+      ? styleStrategy.referenceKeywords
+      : inferredStyle.referenceKeywords
+  };
+
+  spec.renderStrategy = {
+    primaryRenderer: renderStrategy.primaryRenderer || inferred.primaryRenderer,
+    fallbackRenderer: renderStrategy.fallbackRenderer || inferred.fallbackRenderer,
+    animationStyle: renderStrategy.animationStyle || inferred.animationStyle,
+    gameFeel: renderStrategy.gameFeel || inferred.gameFeel,
+    recommendedLibraries: Array.isArray(renderStrategy.recommendedLibraries) && renderStrategy.recommendedLibraries.length
+      ? renderStrategy.recommendedLibraries
+      : inferred.recommendedLibraries,
+    reason: renderStrategy.reason || inferred.reason
+  };
+
+  spec.simulationModel = {
+    stateVariables: Array.isArray(simulationModel.stateVariables) ? simulationModel.stateVariables : [],
+    derivedMetrics: Array.isArray(simulationModel.derivedMetrics) ? simulationModel.derivedMetrics : [],
+    updateRules: Array.isArray(simulationModel.updateRules) ? simulationModel.updateRules : []
+  };
+
+  return spec;
+}
+
+function isSimpleRequest(prompt = '') {
+  const normalized = String(prompt || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return false;
+
+  const separators = (normalized.match(/[，,、；;。]/g) || []).length;
+  const complexPattern = /包括|并且|同时|步骤|流程|评分|问答|关卡|上传|登录|数据库|多人|章节|报告|考核|病例单|表单|随机|规则|系统|平台|工作流/;
+
+  return normalized.length <= 90 && separators <= 4 && !complexPattern.test(normalized);
+}
+
+function inferTeachingGoals(prompt = '', category = '') {
+  const title = extractTitle(prompt);
+
+  if (category === 'medicine') {
+    return [`理解${title}机制`, '观察病理演变', '掌握关键指标变化'];
+  }
+
+  if (['physics', 'engineering', 'electronics'].includes(category)) {
+    return [`理解${title}过程`, '观察参数联动', '对比不同工况结果'];
+  }
+
+  if (['chemistry', 'biology', 'environmental', 'geography'].includes(category)) {
+    return [`观察${title}变化`, '理解系统反馈', '建立动态过程认知'];
+  }
+
+  return [`理解${title}核心规律`, '观察过程反馈', '比较参数变化结果'];
+}
+
+function inferCorePhenomena(prompt = '', category = '') {
+  const title = extractTitle(prompt);
+
+  if (category === 'medicine') {
+    return ['关键组织状态变化', '指标连续波动', `${title}演变过程`];
+  }
+
+  if (['physics', 'engineering', 'electronics'].includes(category)) {
+    return ['主过程动态演化', '参数驱动的画面变化', '实时数值反馈'];
+  }
+
+  return [`${title}主现象`, '参数联动反馈', '过程可视化变化'];
+}
+
+function inferDefaultControls(prompt = '', category = '') {
+  if (category === 'medicine') {
+    return [
+      { name: '进程速度', type: 'slider', purpose: '控制病理演变节奏', range: '0.5x-2x' },
+      { name: '严重程度', type: 'slider', purpose: '调节核心状态强度', range: '0-100' },
+      { name: '播放控制', type: 'button', purpose: '播放、暂停、重置', range: '播放|暂停|重置' }
+    ];
+  }
+
+  if (['physics', 'engineering', 'electronics'].includes(category)) {
+    return [
+      { name: '主参数', type: 'slider', purpose: '控制实验主变量', range: '0-100' },
+      { name: '演示速度', type: 'slider', purpose: '调节动画节奏', range: '0.5x-2x' },
+      { name: '播放控制', type: 'button', purpose: '播放、暂停、重置', range: '播放|暂停|重置' }
+    ];
+  }
+
+  return [
+    { name: '核心强度', type: 'slider', purpose: '调节主要效果强弱', range: '0-100' },
+    { name: '演示速度', type: 'slider', purpose: '控制动态演示节奏', range: '0.5x-2x' },
+    { name: '播放控制', type: 'button', purpose: '播放、暂停、重置', range: '播放|暂停|重置' }
+  ];
+}
+
+function buildFastExperimentSpec(prompt, category) {
+  const cleanPrompt = String(prompt || '').replace(/\s+/g, ' ').trim();
+  const categoryId = category || 'physics';
+  const subject = CATEGORIES.find(c => c.id === categoryId)?.name || '综合';
+  const title = extractTitle(cleanPrompt);
+
+  const spec = {
+    title,
+    summary: cleanPrompt.slice(0, 60),
+    subject,
+    scene: cleanPrompt,
+    teachingGoals: inferTeachingGoals(cleanPrompt, categoryId),
+    corePhenomena: inferCorePhenomena(cleanPrompt, categoryId),
+    controls: inferDefaultControls(cleanPrompt, categoryId),
+    visualModules: ['主动画区', '实时数据卡', '趋势图层'],
+    interactions: ['播放/暂停/重置', '参数变化即时反馈', '关键状态切换'],
+    dataFeedback: ['关键数值', '趋势变化', '状态提示'],
+    qualityBar: [
+      '必须输出可直接运行的单文件 HTML',
+      '必须是动画化案例，而不是静态说明页',
+      '参数变化必须同步驱动画面和数据变化',
+      '页面文案要克制，避免大段提示语',
+      '禁止出现原型式提示词、引导层和教学废话'
+    ]
+  };
+
+  const normalized = normalizeSpec(spec, cleanPrompt, categoryId);
+  normalized.userPrompt = cleanPrompt;
+  normalized.category = categoryId;
+  normalized.subject = normalized.subject || subject;
+  normalized.fastMode = true;
+  return normalized;
+}
+
+function setGeneratingStatus(text) {
+  const el = document.getElementById('generating-status');
+  if (el) el.textContent = text;
+}
+
+async function fetchModelCatalog() {
+  try {
+    const response = await fetch('/api/models');
+    if (!response.ok) {
+      throw new Error(`模型目录获取失败 (${response.status})`);
+    }
+
+    const data = await response.json();
+    state.modelCatalog = Array.isArray(data.presets) ? data.presets : [];
+    state.defaultPreset = data.defaultPreset || state.defaultPreset;
+    saveState();
+    refreshModelHints();
+    return state.modelCatalog;
+  } catch (error) {
+    state.modelCatalog = [];
+    refreshModelHints();
+    return [];
+  }
+}
+
+function getAvailablePresets() {
+  return state.modelCatalog.filter(item => item.available);
+}
+
+function getPreferredPresets(preferredIds = []) {
+  const available = getAvailablePresets();
+  const used = new Set();
+  const ordered = [];
+
+  for (const id of preferredIds) {
+    const matched = available.find(item => item.id === id);
+    if (matched && !used.has(matched.id)) {
+      ordered.push(matched);
+      used.add(matched.id);
+    }
+  }
+
+  for (const item of available) {
+    if (!used.has(item.id)) {
+      ordered.push(item);
+      used.add(item.id);
+    }
+  }
+
+  return ordered;
+}
+
+function choosePreset(preferredIds = []) {
+  if (preferredIds.length === 1) {
+    const exact = getAvailablePresets().find(item => item.id === preferredIds[0]);
+    return exact || null;
+  }
+  const preferred = getPreferredPresets(preferredIds);
+  return preferred[0] || null;
+}
+
+function formatModelSetupHint() {
+  const available = getAvailablePresets();
+  if (available.length > 0) {
+    const names = available.map(item => `${item.label} / ${item.model}`).join('、');
+    return `当前可用模型：${names}`;
+  }
+
+  return '当前未检测到可用模型密钥，请先配置 ZHIPU_API_KEY、MOONSHOT_API_KEY、DEEPSEEK_API_KEY 中至少一个。';
+}
+
+function refreshModelHints() {
+  const hint = formatModelSetupHint();
+  const optimizeBtn = document.getElementById('optimize-btn');
+  const generateBtn = document.getElementById('generate-btn');
+
+  if (optimizeBtn) optimizeBtn.title = hint;
+  if (generateBtn) generateBtn.title = hint;
+}
+
+async function ensureAvailableModel(actionName, preferredIds = []) {
+  if (!state.modelCatalog.length) {
+    await fetchModelCatalog();
+  }
+
+  const preset = choosePreset(preferredIds);
+  if (!preset) {
+    throw new Error(`${actionName}前需要先配置模型密钥。建议先准备 ZHIPU_API_KEY、MOONSHOT_API_KEY，补充 DEEPSEEK_API_KEY。`);
+  }
+
+  state.defaultPreset = preset.id;
+  return preset;
+}
+
+function parseChatText(rawText) {
+  try {
+    const data = JSON.parse(rawText);
+    return data.choices?.[0]?.message?.content || data.output_text || rawText;
+  } catch (error) {
+    return rawText;
+  }
+}
+
+function extractJson(content) {
+  const fenced = content.match(/```json\s*([\s\S]*?)```/i) || content.match(/```\s*([\s\S]*?)```/);
+  const source = fenced ? fenced[1].trim() : content.trim();
+
+  try {
+    return JSON.parse(source);
+  } catch (error) {}
+
+  const firstBrace = source.indexOf('{');
+  const lastBrace = source.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    return JSON.parse(source.slice(firstBrace, lastBrace + 1));
+  }
+
+  throw new Error('模型没有返回可解析的 JSON');
+}
+
+function extractCode(content) {
+  const doctypeIndex = content.indexOf('<!DOCTYPE html>');
+  if (doctypeIndex !== -1) {
+    const htmlOnly = content.slice(doctypeIndex).trim();
+    return htmlOnly.replace(/```+\s*$/g, '').trim();
+  }
+
+  const htmlIndex = content.search(/<html[\s>]/i);
+  if (htmlIndex !== -1) {
+    const htmlOnly = content.slice(htmlIndex).trim();
+    return htmlOnly.replace(/```+\s*$/g, '').trim();
+  }
+
+  let match = content.match(/```html\s*\n?([\s\S]*?)```/i);
+  if (match) return match[1].trim();
+
+  match = content.match(/```\s*\n?([\s\S]*?)```/);
+  if (match) return match[1].trim();
+
+  const trimmed = content.trim();
+  if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html') || trimmed.startsWith('<HTML')) {
+    return trimmed;
+  }
+
+  return trimmed;
+}
+
+function isUsableHtml(content) {
+  const html = extractCode(content);
+  if (!html) return false;
+
+  const hasHtmlShell = html.includes('<html') || html.includes('<!DOCTYPE');
+  const hasInteractiveScript = html.includes('<script');
+  const hasVisualLayer = html.includes('<svg') || html.includes('<canvas') || html.includes('Chart') || html.includes('PIXI') || html.includes('Phaser');
+  const hasLoop = html.includes('requestAnimationFrame') || html.includes('ticker.add') || html.includes('new Phaser.Game');
+  const hasControl = /input|button|select/.test(html);
+  const hasStateOutput = /textContent|innerText|dataset|Chart/.test(html);
+
+  const hasClosedDocument = /<\/body>|<\/html>/i.test(html);
+
+  return hasHtmlShell && hasInteractiveScript && hasVisualLayer && hasLoop && hasControl && hasStateOutput && hasClosedDocument && html.length > 2600;
+}
+
+function localReviewExperiment(spec, html) {
+  const issues = [];
+  const text = String(html || '');
+
+  if (!isUsableHtml(text)) {
+    issues.push('页面尚未达到可交付的动画实验标准');
+  }
+
+  if (/交互提示|点击这里|使用说明|体验提示|原型|教学说明|操作说明/.test(text)) {
+    issues.push('页面中出现了不需要的提示性文案');
+  }
+
+  if (!/(canvas|svg|chart|pixi|phaser)/i.test(text)) {
+    issues.push('缺少明确的可视化动画层');
+  }
+
+  return {
+    pass: issues.length === 0,
+    score: issues.length === 0 ? 90 : Math.max(55, 85 - issues.length * 12),
+    issues,
+    fixes: issues.length === 0 ? [] : ['收敛页面文案', '强化动画层与参数联动', '确保输出完整可运行 HTML']
+  };
+}
+
+async function requestChat({ preset, messages, stream = false, temperature, max_tokens = 8192, top_p, timeout = 90000, thinking, tools, tool_choice, onChunk }) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  let fullContent = '';
+  let buffer = '';
+
+  try {
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'glm-4-flash',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: `${categoryHint}\n\n用户需求：${prompt}\n\n请生成完整的单文件 HTML 虚拟仿真实验代码。` }
-        ],
-        stream: true
+        preset,
+        messages,
+        stream,
+        temperature,
+        max_tokens,
+        top_p,
+        thinking,
+        tools,
+        tool_choice
       }),
       signal: controller.signal
     });
-    clearTimeout(timeoutId);
 
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      onError(err.error || `服务器错误 (${response.status})`);
-      return;
+      const raw = await response.text();
+      let errorMessage = `服务器错误 (${response.status})`;
+
+      try {
+        const parsed = JSON.parse(raw);
+        errorMessage = parsed.error || errorMessage;
+      } catch (error) {
+        if (raw) errorMessage = raw;
+      }
+
+      throw new Error(errorMessage);
+    }
+
+    if (!stream) {
+      const rawText = await response.text();
+      return {
+        content: parseChatText(rawText),
+        preset: response.headers.get('X-Model-Preset') || preset,
+        provider: response.headers.get('X-Model-Provider') || ''
+      };
     }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let fullContent = '';
-    let buffer = '';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -726,45 +1430,241 @@ async function generateExperiment(prompt, category, onChunk, onDone, onError) {
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed || !trimmed.startsWith('data:')) continue;
+
         const data = trimmed.slice(5).trim();
         if (data === '[DONE]') {
-          onDone(extractCode(fullContent));
-          return;
+          return {
+            content: fullContent,
+            preset: response.headers.get('X-Model-Preset') || preset,
+            provider: response.headers.get('X-Model-Provider') || ''
+          };
         }
+
         try {
           const json = JSON.parse(data);
-          const content = json.choices?.[0]?.delta?.content || '';
-          if (content) {
-            fullContent += content;
-            onChunk(fullContent);
+          const delta = json.choices?.[0]?.delta?.content || '';
+          if (delta) {
+            fullContent += delta;
+            if (onChunk) onChunk(fullContent);
+            if (fullContent.length > 2500 && /<\/html>/i.test(fullContent)) {
+              return {
+                content: fullContent,
+                preset: response.headers.get('X-Model-Preset') || preset,
+                provider: response.headers.get('X-Model-Provider') || ''
+              };
+            }
           }
-        } catch(e) {}
+        } catch (error) {}
       }
     }
 
-    onDone(extractCode(fullContent));
-  } catch(err) {
-    if (err.name === 'AbortError') {
-      onError('生成超时，请重试或简化描述');
-    } else if (err.message?.includes('fetch')) {
-      onError('无法连接服务器，请刷新页面重试');
-    } else {
-      onError(err.message || '网络错误');
+    return {
+      content: fullContent,
+      preset: response.headers.get('X-Model-Preset') || preset,
+      provider: response.headers.get('X-Model-Provider') || ''
+    };
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      if (stream && fullContent.length > 2200 && /<\/body>|<\/html>/i.test(fullContent)) {
+        return {
+          content: fullContent,
+          preset,
+          provider: ''
+        };
+      }
+      throw new Error(`Kimi 在 ${Math.round(timeout / 1000)} 秒内未完成生成，请重试`);
     }
+
+    if (error.message?.includes('Failed to fetch')) {
+      throw new Error('无法连接服务端，请刷新页面后重试');
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
-function extractCode(content) {
-  // Try ```html ... ```
-  let match = content.match(/```html\s*\n?([\s\S]*?)```/);
-  if (match) return match[1].trim();
-  // Try ``` ... ```
-  match = content.match(/```\s*\n?([\s\S]*?)```/);
-  if (match) return match[1].trim();
-  // Check if starts with HTML
-  const trimmed = content.trim();
-  if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html') || trimmed.startsWith('<HTML')) return trimmed;
-  return trimmed;
+async function requestChatText(options) {
+  const result = await requestChat(options);
+  return result.content || '';
+}
+
+async function optimizePromptDraft(input, category) {
+  const config = STAGE_CONFIG.optimize;
+  const preset = await ensureAvailableModel('优化提示词', MODEL_PREFERENCE.optimize);
+  const categoryHint = getCategoryContext(category);
+
+  return requestChatText({
+    preset: preset.id,
+    stream: false,
+    max_tokens: config.max_tokens,
+    timeout: config.timeout,
+    thinking: config.thinking,
+    messages: [
+      { role: 'system', content: PROMPT_OPTIMIZER_SYSTEM },
+      { role: 'user', content: `${categoryHint}\n用户原始需求：${input}` }
+    ]
+  });
+}
+
+async function buildExperimentSpec(prompt, category) {
+  const config = STAGE_CONFIG.spec;
+  const preset = await ensureAvailableModel('生成实验规格', MODEL_PREFERENCE.spec);
+  const categoryHint = getCategoryContext(category);
+
+  const content = await requestChatText({
+    preset: preset.id,
+    stream: false,
+    max_tokens: config.max_tokens,
+    timeout: config.timeout,
+    thinking: config.thinking,
+    messages: [
+      { role: 'system', content: SPEC_SYSTEM_PROMPT },
+      { role: 'user', content: `${categoryHint}\n用户需求：${prompt}` }
+    ]
+  });
+
+  const spec = normalizeSpec(extractJson(content), prompt, category || 'physics');
+  spec.subject = spec.subject || (CATEGORIES.find(c => c.id === category)?.name || '综合');
+  spec.userPrompt = prompt;
+  spec.category = category || 'physics';
+  return { spec, preset };
+}
+
+async function critiqueExperiment(spec, html) {
+  const config = STAGE_CONFIG.review;
+  const preset = await ensureAvailableModel('质量检查', MODEL_PREFERENCE.review);
+  const content = await requestChatText({
+    preset: preset.id,
+    stream: false,
+    max_tokens: config.max_tokens,
+    timeout: config.timeout,
+    thinking: config.thinking,
+    messages: [
+      { role: 'system', content: REVIEW_SYSTEM_PROMPT },
+      { role: 'user', content: `实验规格：\n${JSON.stringify(spec, null, 2)}\n\nHTML：\n${extractCode(html)}` }
+    ]
+  });
+
+  const review = extractJson(content);
+  review.issues = Array.isArray(review.issues) ? review.issues : [];
+  review.fixes = Array.isArray(review.fixes) ? review.fixes : [];
+  review.pass = Boolean(review.pass);
+  review.score = Number.isFinite(review.score) ? review.score : 0;
+  return { review, preset };
+}
+
+async function streamHtmlFromSpec(spec, onChunk, onStatus, options = {}) {
+  const fastMode = options.mode === 'fast';
+  const config = fastMode ? STAGE_CONFIG.fastGenerate : STAGE_CONFIG.generate;
+  const preset = await ensureAvailableModel('生成实验', MODEL_PREFERENCE.generate);
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      if (onStatus) {
+        onStatus(attempt === 1
+          ? (fastMode
+            ? `正在用 Kimi 快速生成案例动画... (${preset.label || preset.id})`
+            : `正在生成实验界面... (${preset.label || preset.id})`)
+          : `正在用 ${preset.label || preset.id} 补强成品质量...`);
+      }
+
+      const result = await requestChat({
+        preset: preset.id,
+        stream: true,
+        max_tokens: config.max_tokens,
+        timeout: config.timeout,
+        thinking: config.thinking,
+        onChunk,
+        messages: [
+          { role: 'system', content: COMPACT_HTML_SYSTEM_PROMPT },
+          {
+            role: 'user',
+            content: attempt === 1
+              ? `${fastMode ? '这是一个简单需求，请直接输出最终可运行的高质量动画案例，不要解释，不要分析过程。' : '请根据以下实验规格生成最终成品 HTML：'}\n${JSON.stringify(spec, null, 2)}`
+              : `上一版仍不够稳定或不够完整。请只用同一案例主题，输出更稳定、更精致、更完整的最终成品 HTML，确保动画、交互和数据联动都可直接运行：\n${JSON.stringify(spec, null, 2)}`
+          }
+        ]
+      });
+
+      return { html: extractCode(result.content), preset };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error('Kimi 生成失败，请稍后重试');
+}
+
+async function repairExperiment(spec, html, review) {
+  const config = STAGE_CONFIG.repair;
+  const preset = await ensureAvailableModel('修复实验', MODEL_PREFERENCE.repair);
+  const content = await requestChatText({
+    preset: preset.id,
+    stream: false,
+    max_tokens: config.max_tokens,
+    timeout: config.timeout,
+    thinking: config.thinking,
+    messages: [
+      { role: 'system', content: REPAIR_SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: `实验规格：\n${JSON.stringify(spec, null, 2)}\n\n审查结果：\n${JSON.stringify(review, null, 2)}\n\n当前 HTML：\n${extractCode(html)}`
+      }
+    ]
+  });
+
+  return { html: extractCode(content), preset };
+}
+
+// ===== API =====
+async function generateExperiment(prompt, category, onChunk, onDone, onError) {
+  try {
+    const config = STAGE_CONFIG.directGenerate;
+    if (!state.modelCatalog.length) {
+      await fetchModelCatalog();
+    }
+    const preset = state.modelCatalog.find((item) => item.id === 'premium' && item.available);
+    if (!preset) {
+      throw new Error('当前仅支持 Kimi premium，请先配置并启用 MOONSHOT_API_KEY');
+    }
+    setGeneratingStatus(`正在直连 Kimi 生成最终案例... (${preset.label || preset.id})`);
+
+    const result = await requestChat({
+      preset: preset.id,
+      stream: true,
+      max_tokens: config.max_tokens,
+      timeout: config.timeout,
+      thinking: config.thinking,
+      onChunk,
+      messages: [
+        { role: 'system', content: DIRECT_KIMI_CASE_SYSTEM_PROMPT },
+        { role: 'user', content: buildDirectUserContent(prompt, category) }
+      ]
+    });
+
+    const finalHtml = extractCode(result.content);
+    if (!isUsableHtml(finalHtml)) {
+      throw new Error('Kimi 已返回内容，但本轮 HTML 不完整，请直接重试');
+    }
+
+    onDone(finalHtml, {
+      spec: {
+        title: extractTitle(prompt),
+        summary: prompt.slice(0, 100)
+      },
+      review: {
+        pass: true,
+        score: 100,
+        issues: [],
+        fixes: []
+      }
+    });
+  } catch (err) {
+    onError(err.message || '生成失败');
+  }
 }
 
 // ===== RENDERING =====
@@ -1017,6 +1917,8 @@ function enterApp() {
   renderSidebar();
   renderCategoryTags();
   renderQuickPrompts();
+  refreshModelHints();
+  fetchModelCatalog();
   showEmptyState();
 }
 
@@ -1062,26 +1964,7 @@ async function handleOptimizePrompt() {
   btn.disabled = true;
   
   try {
-    const catInfo = CATEGORIES.find(c => c.id === state.selectedCategory);
-    const categoryHint = catInfo ? `学科领域：${catInfo.name}。` : '';
-    
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'glm-4-flash',
-        messages: [
-          { role: 'system', content: '你是一个虚拟仿真实验设计专家。你的任务是将用户简单的实验描述扩展成一个详细、专业的实验设计提示词。包含：实验目的、具体功能需求、交互参数、可视化要求等。输出纯文本，不要markdown格式。' },
-          { role: 'user', content: `${categoryHint}用户想做的实验："${input}"\n\n请将其扩展成一个详细的实验设计提示词，用于生成完整的交互式虚拟仿真实验。要求具体、专业、可操作。` }
-        ],
-        stream: false
-      })
-    });
-    
-    if (!response.ok) throw new Error('优化失败');
-    
-    const data = await response.json();
-    const optimizedPrompt = data.choices?.[0]?.message?.content || '';
+    const optimizedPrompt = await optimizePromptDraft(input, state.selectedCategory);
     
     if (optimizedPrompt) {
       document.getElementById('optimized-prompt').value = optimizedPrompt;
@@ -1095,14 +1978,17 @@ async function handleOptimizePrompt() {
   }
 }
 
-function handleGenerate() {
-  // 优先使用优化后的提示词
-  const optimizedPrompt = document.getElementById('optimized-prompt').value.trim();
+async function handleGenerate() {
   const inputPrompt = document.getElementById('prompt-input').value.trim();
-  const prompt = optimizedPrompt || inputPrompt;
+  const prompt = inputPrompt;
   
-  if (!prompt) return;
+  if (!prompt) {
+    alert('请先输入实验需求');
+    return;
+  }
   if (state.isGenerating) return;
+
+  await fetchModelCatalog();
 
   state.isGenerating = true;
   state.prompt = prompt;
@@ -1115,17 +2001,17 @@ function handleGenerate() {
     state.selectedCategory,
     (content) => {
       chunkCount++;
-      if (chunkCount % 5 === 0) {
-        document.getElementById('generating-status').textContent = `已接收 ${content.length} 字符...`;
+      if (chunkCount % 8 === 0) {
+        setGeneratingStatus(`正在生成案例... 已输出 ${content.length} 字符`);
       }
     },
-    (code) => {
+    (code, meta) => {
       state.isGenerating = false;
       updateGenerateButton(false);
       const experiment = {
         id: Date.now().toString(),
-        title: extractTitle(prompt),
-        description: prompt.slice(0, 100),
+        title: meta?.spec?.title || extractTitle(prompt),
+        description: meta?.spec?.summary || prompt.slice(0, 100),
         code: code,
         createdAt: new Date().toISOString(),
         category: state.selectedCategory || 'physics'
@@ -1183,7 +2069,7 @@ function showGeneratingState() {
   document.getElementById('generating-state').classList.remove('hidden');
   document.getElementById('preview-iframe').classList.add('hidden');
   document.getElementById('code-view').classList.add('hidden');
-  document.getElementById('generating-status').textContent = '正在调用大模型...';
+  setGeneratingStatus('正在启动 Kimi 生成...');
 }
 
 function showPreview(code) {
@@ -1243,6 +2129,8 @@ function handleNewExperiment() {
   document.getElementById('prompt-input').value = '';
   document.getElementById('optimized-prompt').value = '';
   document.getElementById('optimized-prompt-container').classList.add('hidden');
+  state.uploadedAssets = [];
+  renderAssetList();
   state.prompt = '';
   showEmptyState();
 }
@@ -1321,9 +2209,12 @@ function removeUser(id) {
 }
 
 // ===== INIT =====
-function init() {
+async function init() {
   loadState();
   renderPortalSubjects();
+  renderAssetList();
+  refreshModelHints();
+  await fetchModelCatalog();
 }
 
 init();
