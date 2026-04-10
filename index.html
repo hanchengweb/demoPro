@@ -1492,7 +1492,13 @@ async function requestChatText(options) {
 
 async function optimizePromptDraft(input, category) {
   const config = STAGE_CONFIG.optimize;
-  const preset = await ensureAvailableModel('优化提示词', MODEL_PREFERENCE.optimize);
+  if (!state.modelCatalog.length) {
+    await fetchModelCatalog();
+  }
+  const preset = state.modelCatalog.find((item) => item.id === 'premium' && item.available);
+  if (!preset) {
+    throw new Error('优化提示词前请先配置并启用 MOONSHOT_API_KEY');
+  }
   const categoryHint = getCategoryContext(category);
 
   return requestChatText({
