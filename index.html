@@ -587,13 +587,13 @@ const MODEL_PREFERENCE = {
 };
 
 const STAGE_CONFIG = {
-  optimize: { max_tokens: 1600, timeout: 45000, thinking: { type: 'disabled' } },
-  spec: { max_tokens: 2800, timeout: 50000, thinking: { type: 'disabled' } },
-  fastGenerate: { max_tokens: 8200, timeout: 150000, thinking: { type: 'enabled', budget_tokens: 1024 } },
-  generate: { max_tokens: 9800, timeout: 180000, thinking: { type: 'enabled', budget_tokens: 2048 } },
-  directGenerate: { max_tokens: 12000, timeout: 0, thinking: { type: 'enabled', budget_tokens: 2048 } },
-  review: { max_tokens: 1800, timeout: 25000, thinking: { type: 'disabled' } },
-  repair: { max_tokens: 12000, timeout: 150000, thinking: { type: 'enabled', budget_tokens: 1024 } }
+  optimize: { max_tokens: 4000, timeout: 0, thinking: { type: 'disabled' } },
+  spec: { max_tokens: 8000, timeout: 0, thinking: { type: 'disabled' } },
+  fastGenerate: { max_tokens: null, timeout: 0, thinking: { type: 'enabled', budget_tokens: 2048 } },
+  generate: { max_tokens: null, timeout: 0, thinking: { type: 'enabled', budget_tokens: 4096 } },
+  directGenerate: { max_tokens: null, timeout: 0, thinking: { type: 'enabled', budget_tokens: 4096 } },
+  review: { max_tokens: 4000, timeout: 0, thinking: { type: 'disabled' } },
+  repair: { max_tokens: null, timeout: 0, thinking: { type: 'enabled', budget_tokens: 2048 } }
 };
 
 const GENERATION_POLICY = {
@@ -610,6 +610,7 @@ const PROMPT_OPTIMIZER_SYSTEM = `你是顶级虚拟仿真教学案例策划专�
 3. 交互闭环：策划至少两个互斥模式（如：Explore 自由探索 vs Challenge 任务验证）。
 4. 悬浮提示：规划基于坐标或距离计算的智能悬浮浮窗（Tooltip），用于实时展示核心组件的专业参数与原理解析。
 5. 动态反馈：要求包含 3 个以上的交互式挑战题目，并配备全屏动效反馈。
+6. 语言规范：生成后的案例界面文案、按钮、标题、提示、图例、挑战文本、悬浮说明必须默认使用简体中文，只有 ARDS、DNA、pH、mmHg 等必要专业缩写可保留。
 
 输出要求：只输出优化后的提示词正文，字数 300-400 字，语气专业且严谨。`;
 
@@ -666,19 +667,22 @@ Hard rules:
 3. Follow the provided spec exactly, especially styleStrategy and renderStrategy.
 4. Produce a finished case, not a prototype, tutorial page, or placeholder demo.
 5. Use concise Chinese UI labels and keep page copy minimal.
+5.1 All visible interface text must default to Simplified Chinese. Keep English only for unavoidable domain abbreviations, units, formulas, protocol names, or internationally standard symbols.
 6. Do not include onboarding text, teaching overlays, click hints, 操作说明, 交互提示, or similar prompt-like copy.
 7. Every control must visibly affect animation, state, and data.
 8. Prefer compact, production-ready code. Avoid repeated CSS, repeated components, and unnecessary wrappers.
 9. Prefer native Canvas/SVG with vanilla JavaScript. Only use PixiJS or Chart.js when they clearly improve the final result.
 10. Keep the result efficient: polished, animated, interactive, but not bloated.
 11. Syntax Check: Ensure all JavaScript template strings and braces are perfectly balanced.
+12. Avoid flat visuals. Use layered composition, light/shadow, gradients, blur, highlights, occlusion, scale contrast, and pseudo-3D perspective when rendering with Canvas or SVG.
 
 Quality target:
 - smooth continuous animation
 - strong visual finish
 - clear parameter feedback
 - theme aligned to the case
-- immediately deliverable final HTML`;
+- immediately deliverable final HTML
+- canvas/svg scenes should feel layered and semi-3D, not visually flat`;
 
 const DIRECT_KIMI_CASE_SYSTEM_PROMPT = `你是顶级虚拟仿真案例架构师。你的任务是直接生成具备“极高审美上限”和“深度交互逻辑”的通用单文件 HTML。
 
@@ -696,6 +700,10 @@ const DIRECT_KIMI_CASE_SYSTEM_PROMPT = `你是顶级虚拟仿真案例架构师�
    - 挑战闭环：内置至少 3 个交互挑战题目，并配备全屏动效正误反馈。
 4. 动画逻辑（ES6 Class 驱动）：
    - 核心仿真必须使用 ES6 Class 封装对象，内置具体的物理/数学公式计算。
+5. 文案语言规范：
+   - 页面中所有用户可见文案默认使用简体中文，包括标题、按钮、图例、指标标签、提示框、挑战卡、反馈文案。
+   - 仅允许保留必要的专业缩写、单位或国际通用符号，如 ARDS、DNA、pH、mmHg、ECG。
+   - 禁止出现整块英文标题、整组英文控制面板、英文挑战标题或英文说明段落。
 
 输出要求：只输出源码，严禁任何文字解释。语法完美，模板字符串必须闭合。`;
 
@@ -728,6 +736,84 @@ const REPAIR_SYSTEM_PROMPT = `你是高级前端修复工程师。
 1. 只输出修复后的完整 HTML，以 <!DOCTYPE html> 开头。
 2. 保留已有可用部分，重点补齐交互、数据反馈和视觉层次，去掉原型式提示语。
 3. 不要解释，不要 markdown。`;
+
+const DIRECT_CASE_PROMPT_V2 = `You are a principal engineer for interactive simulation cases.
+Return only one complete, production-ready HTML document.
+
+Hard requirements:
+1. Start with <!DOCTYPE html> and end with </html>.
+2. Use a real visual simulation layer with canvas or svg.
+3. The page must run directly in a browser with no build step.
+4. All JavaScript must be fully implemented. No TODO, no pseudo code, no omitted sections.
+5. Comments must be on their own line. Never place executable code after // on the same line.
+6. Declare variables before use and avoid scope bugs.
+7. Close every HTML tag and template string correctly.
+8. Use ES6 classes for core simulation objects when the case includes a dynamic mechanism.
+9. Keep the interface concise. No prototype-style filler text or long onboarding copy.
+10. The result must feel like a finished teaching product with polished visuals, responsive interaction, and stable logic.
+11. All user-facing interface text must be in Simplified Chinese by default. English is allowed only for strict technical abbreviations, units, formulas, APIs, or universally recognized symbols.
+
+Visual direction:
+- dark premium dashboard
+- glassmorphism panels
+- neon highlights
+- layered composition
+- pseudo-3D depth through glow, shadow, parallax, scale contrast, and occlusion
+
+Interaction direction:
+- at least one true simulation loop
+- parameter controls with immediate visual response
+- hover tooltip tied to actual visual entities
+- challenge or verification tasks with visible feedback
+
+Output:
+- source code only
+- no markdown fences
+- no explanation`;
+
+const DIRECT_OUTPUT_CONTRACT = `Output contract:
+- one single-file HTML document only
+- directly runnable in a browser
+- no markdown fences
+- no explanation text
+- comments must never share a line with executable code`;
+
+const GENERIC_CASE_HARD_REQUIREMENTS = `General hard requirements:
+- Build a finished teaching product, not a prototype page.
+- The HTML, CSS, and JavaScript must be complete and internally consistent.
+- Do not leave undefined variables, placeholder functions, TODO markers, or missing handlers.
+- Bind DOM events only after the related elements exist.
+- Every control must affect visible state, animation, or data.
+- Keep text concise and avoid filler guidance panels.
+- Avoid fragile code patterns that commonly break in browser runtime.
+- Keep the final HTML within 30000 UTF-8 bytes while remaining complete, runnable, and visually polished.
+- Never leave truncated tags, unfinished scripts, half-written styles, or incomplete interaction loops.
+- If size pressure conflicts with richness, prefer a smaller complete case over a larger broken one.
+- Preserve strong visual quality and interaction quality through efficient structure, reusable styles, and concise logic rather than verbose code.
+- If the scene is complex, prioritize a complete runnable core experience over excessive code volume.
+- Keep all visible UI copy in Simplified Chinese by default. English may appear only as necessary abbreviations, units, formulas, protocol names, or standard scientific symbols.
+- Do not generate English-only control panels, English-only challenge cards, or English-only dashboard headings.`;
+
+const PHYSICS_CASE_HARD_REQUIREMENTS = `Physics-case hard requirements:
+- Build an interactive simulation platform, not a static demo.
+- Include an explicit mode state machine with Explore and Challenge as mutually exclusive modes.
+- Use ES6 classes for core entities. If the prompt names Node, Particle, StructuralEntity, implement those exact class names.
+- Tooltip content must be computed from actual entity position and bounds.
+- The challenge system must use real validation logic and visible success or failure feedback.
+- Prefer Canvas for the main simulation layer and keep frame updates smooth.
+- Do not collapse the result into one toy mechanic if the prompt asks for a platform or multiple tasks.`;
+
+const DIRECT_REPAIR_PROMPT_V2 = `You are an expert front-end repair engineer.
+Fix the provided HTML into a complete, runnable single-file HTML document.
+
+Repair goals:
+1. Keep the same topic and visual direction.
+2. Fix syntax, scope, initialization, DOM structure, and event binding issues.
+3. Remove broken patterns such as executable code swallowed by line comments.
+4. Ensure the repaired result opens and runs directly in a browser.
+5. Keep the page concise and product-like.
+
+Return source code only, beginning with <!DOCTYPE html>.`;
 
 // ===== STATE =====
 let state = {
@@ -880,7 +966,13 @@ function buildDirectUserContent(prompt, category) {
   const categoryHint = getCategoryContext(category);
   const textAssets = state.uploadedAssets.filter((asset) => asset.kind === 'text');
   const imageAssets = state.uploadedAssets.filter((asset) => asset.kind === 'image');
-  const textBlocks = [`${categoryHint}\n用户需求：${prompt}`];
+  const depthHint = '主画面不要过于平面。若使用 Canvas 或 SVG，必须主动做出前景/中景/背景分层、半透明叠层、投影、高光、遮挡关系、透视缩放和轻微视差，形成仿 3D 的空间层次。';
+  const hardRequirements = buildDirectGenerationRequirements(prompt, category);
+  const textBlocks = [
+    `${categoryHint}\n用户需求：${prompt}`,
+    depthHint,
+    hardRequirements
+  ];
 
   if (textAssets.length) {
     textBlocks.push(`以下是用户上传的参考文件内容，请理解后直接用于生成：\n${textAssets.map((asset) => `【${asset.name}】\n${asset.text}`).join('\n\n')}`);
@@ -903,6 +995,116 @@ function getCategoryContext(category) {
   const catInfo = CATEGORIES.find(c => c.id === category);
   if (!catInfo) return '';
   return `学科领域：${catInfo.name}。领域说明：${catInfo.desc}。`;
+}
+
+function buildDirectGenerationRequirements(prompt = '', category = '') {
+  const requirements = [DIRECT_OUTPUT_CONTRACT, GENERIC_CASE_HARD_REQUIREMENTS];
+  const normalizedPrompt = String(prompt || '');
+  const isPhysicsFamily = ['physics', 'engineering', 'electronics'].includes(category);
+  const asksStateMachine = /Explore|Challenge|状态机|模式切换|自由探索|任务验证/i.test(normalizedPrompt);
+  const asksEntityClasses = /Node|Particle|StructuralEntity/i.test(normalizedPrompt);
+
+  if (isPhysicsFamily || asksStateMachine || asksEntityClasses) {
+    requirements.push(PHYSICS_CASE_HARD_REQUIREMENTS);
+  }
+
+  if (asksEntityClasses) {
+    requirements.push('Implement exact class names: Node, Particle, StructuralEntity.');
+  }
+
+  if (asksStateMachine) {
+    requirements.push('Implement a real mode state machine and isolate Explore vs Challenge state.');
+  }
+
+  return requirements.join('\n\n');
+}
+
+function findHtmlStructuralIssues(html, prompt = '', category = '') {
+  const issues = [];
+  const text = String(html || '');
+  const normalizedPrompt = String(prompt || '');
+  const isPhysicsFamily = ['physics', 'engineering', 'electronics'].includes(category);
+
+  if (!/^\s*<!DOCTYPE html>/i.test(text)) {
+    issues.push('缺少完整的 HTML 文档起始结构');
+  }
+  if (!/<\/html>\s*$/i.test(text)) {
+    issues.push('缺少 HTML 结束标签');
+  }
+  if (!/<script[\s>]/i.test(text)) {
+    issues.push('缺少脚本逻辑层');
+  }
+  if (!/(<canvas|<svg)/i.test(text)) {
+    issues.push('缺少真实仿真渲染层');
+  }
+  if (!/requestAnimationFrame|setInterval|ticker\.add|new Phaser\.Game/i.test(text)) {
+    issues.push('缺少持续更新的动画循环');
+  }
+  if (/\/\/[^\n]*(?:\bif\s*\(|\bfor\s*\(|\bwhile\s*\(|\bconst\s+|\blet\s+|\bvar\s+|\bclass\s+|\bfunction\s+|\breturn\b)/.test(text)) {
+    issues.push('存在注释吞掉后续可执行代码的风险');
+  }
+  if (/const\s+width\s*=.*?[\r\n]+[\s\S]{0,220}?width\s*\//.test(text) && !/const\s+width\s*=\s*this\.canvas\.width;[\s\S]*const\s+targetX\s*=/.test(text)) {
+    issues.push('可能存在 width 或 height 作用域错误');
+  }
+  if (/undefined|TODO|placeholder|待补充|示例占位|点击这里|操作说明|使用说明/i.test(text)) {
+    issues.push('存在占位式或原型式残留内容');
+  }
+  if (/<title>\s*<\/title>/i.test(text) || /<body[^>]*>\s*<\/body>/i.test(text)) {
+    issues.push('页面主结构过空，疑似未完整生成');
+  }
+  if (/document\.getElementById\([^\)]*\)\.(?:addEventListener|onclick)/.test(text) && !/DOMContentLoaded|window\.addEventListener\(['"]load['"]|function init\(/.test(text)) {
+    issues.push('事件绑定初始化可能不稳定');
+  }
+  if (!/<\/body>/i.test(text)) {
+    issues.push('缺少 body 结束标签');
+  }
+
+  const wantsExactClasses = /Node|Particle|StructuralEntity/i.test(normalizedPrompt);
+  if ((isPhysicsFamily || wantsExactClasses) && !/class\s+Node\b/.test(text) && /Node/i.test(normalizedPrompt)) {
+    issues.push('缺少 Node 类定义');
+  }
+  if ((isPhysicsFamily || wantsExactClasses) && !/class\s+Particle\b/.test(text) && /Particle/i.test(normalizedPrompt)) {
+    issues.push('缺少 Particle 类定义');
+  }
+  if ((isPhysicsFamily || wantsExactClasses) && !/class\s+StructuralEntity\b/.test(text) && /StructuralEntity/i.test(normalizedPrompt)) {
+    issues.push('缺少 StructuralEntity 类定义');
+  }
+  if ((isPhysicsFamily || /Explore|Challenge|状态机|自由探索|任务验证/i.test(normalizedPrompt)) && !/Explore/.test(text)) {
+    issues.push('缺少 Explore 模式');
+  }
+  if ((isPhysicsFamily || /Explore|Challenge|状态机|自由探索|任务验证/i.test(normalizedPrompt)) && !/Challenge/.test(text)) {
+    issues.push('缺少 Challenge 模式');
+  }
+
+  return issues;
+}
+
+async function repairDirectExperiment(prompt, category, html, issues) {
+  const config = STAGE_CONFIG.repair;
+  const preset = await ensureAvailableModel('修复实验', MODEL_PREFERENCE.repair);
+  const content = await requestChatText({
+    preset: preset.id,
+    stream: false,
+    max_tokens: config.max_tokens,
+    timeout: config.timeout,
+    temperature: 0.8,
+    thinking: config.thinking,
+    messages: [
+      { role: 'system', content: DIRECT_REPAIR_PROMPT_V2 },
+      {
+        role: 'user',
+        content: [
+          `用户需求：${prompt}`,
+          getCategoryContext(category),
+          buildDirectGenerationRequirements(prompt, category),
+          `请优先修复这些问题：\n- ${issues.join('\n- ')}`,
+          `当前 HTML：\n${extractCode(html)}`
+        ].filter(Boolean).join('\n\n')
+      }
+    ]
+  });
+
+  return extractCode(content);
 }
 
 function inferRenderStrategy(prompt = '', category = '') {
@@ -1285,20 +1487,23 @@ function isUsableHtml(content) {
   const hasVisualLayer = html.includes('<svg') || html.includes('<canvas') || html.includes('Chart') || html.includes('PIXI') || html.includes('Phaser') || html.includes('getContext');
   const hasLoop = /requestAnimationFrame|ticker\.add|new Phaser\.Game|setInterval|setTimeout/.test(html);
   const hasControl = /input|button|select|click|change|addEventListener/.test(html);
-  
   const hasClosedDocument = /<\/body>|<\/html>/i.test(html);
+  const hasCommentCollision = /\/\/[^\n]*(?:\bif\s*\(|\bfor\s*\(|\bwhile\s*\(|\bconst\s+|\blet\s+|\bvar\s+|\bclass\s+|\bfunction\s+)/.test(html);
 
-  // 降低最低字符数阈值到 2000，增加对多种交互方式的兼容
-  return hasHtmlShell && hasInteractiveScript && hasVisualLayer && hasLoop && (hasControl || html.includes('onclick')) && hasClosedDocument && html.length > 2000;
+  return hasHtmlShell && hasInteractiveScript && hasVisualLayer && hasLoop && (hasControl || html.includes('onclick')) && hasClosedDocument && !hasCommentCollision && html.length > 2000;
 }
 
 function localReviewExperiment(spec, html) {
-  const issues = [];
   const text = String(html || '');
+  const issues = [];
+  const category = spec?.category || '';
+  const prompt = spec?.userPrompt || spec?.scene || spec?.summary || '';
 
   if (!isUsableHtml(text)) {
     issues.push('页面尚未达到可交付的动画实验标准');
   }
+
+  issues.push(...findHtmlStructuralIssues(text, prompt, category));
 
   if (/交互提示|点击这里|使用说明|体验提示|原型|教学说明|操作说明/.test(text)) {
     issues.push('页面中出现了不需要的提示性文案');
@@ -1308,15 +1513,16 @@ function localReviewExperiment(spec, html) {
     issues.push('缺少明确的可视化动画层');
   }
 
+  const dedupedIssues = Array.from(new Set(issues));
   return {
-    pass: issues.length === 0,
-    score: issues.length === 0 ? 90 : Math.max(55, 85 - issues.length * 12),
-    issues,
-    fixes: issues.length === 0 ? [] : ['收敛页面文案', '强化动画层与参数联动', '确保输出完整可运行 HTML']
+    pass: dedupedIssues.length === 0,
+    score: dedupedIssues.length === 0 ? 92 : Math.max(40, 88 - dedupedIssues.length * 10),
+    issues: dedupedIssues,
+    fixes: dedupedIssues.length === 0 ? [] : ['收敛页面文案', '修复结构与作用域错误', '强化动画层与参数联动', '确保输出完整可运行 HTML']
   };
 }
 
-async function requestChat({ preset, messages, stream = false, temperature, max_tokens = 8192, top_p, timeout = 90000, thinking, tools, tool_choice, onChunk }) {
+async function requestChat({ preset, messages, stream = false, temperature, max_tokens, top_p, timeout = 0, thinking, tools, tool_choice, onChunk }) {
   const controller = new AbortController();
   const hasTimeout = Number.isFinite(timeout) && timeout > 0;
   const timeoutId = hasTimeout ? setTimeout(() => controller.abort(), timeout) : null;
@@ -1324,20 +1530,25 @@ async function requestChat({ preset, messages, stream = false, temperature, max_
   let buffer = '';
 
   try {
+    const payload = {
+      preset,
+      messages,
+      stream,
+      temperature,
+      top_p,
+      thinking,
+      tools,
+      tool_choice
+    };
+
+    if (Number.isFinite(max_tokens) && max_tokens > 0) {
+      payload.max_tokens = max_tokens;
+    }
+
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        preset,
-        messages,
-        stream,
-        temperature,
-        max_tokens,
-        top_p,
-        thinking,
-        tools,
-        tool_choice
-      }),
+      body: JSON.stringify(payload),
       signal: controller.signal
     });
 
@@ -1413,10 +1624,7 @@ async function requestChat({ preset, messages, stream = false, temperature, max_
           provider: ''
         };
       }
-      if (hasTimeout) {
-        throw new Error(`Kimi 在 ${Math.round(timeout / 1000)} 秒内未完成生成，请重试`);
-      }
-      throw new Error('Kimi 生成被中断，请重试');
+      throw new Error('生成过程被中断，请重试');
     }
 
     if (error.message?.includes('Failed to fetch')) {
@@ -1586,32 +1794,45 @@ async function generateExperiment(prompt, category, onChunk, onDone, onError) {
     if (!preset) {
       throw new Error('当前仅支持 Kimi premium，请先配置并启用 MOONSHOT_API_KEY');
     }
-    setGeneratingStatus(`正在直连 Kimi 生成最终案例... (${preset.label || preset.id})`);
+    setGeneratingStatus(`Kimi 正在生成... (${preset.label || preset.id})`);
 
     const result = await requestChat({
       preset: preset.id,
       stream: true,
       max_tokens: config.max_tokens,
       timeout: config.timeout,
-      temperature: 1.0,
-      top_p: 0.95,
+      temperature: 0.85,
+      top_p: 0.9,
       thinking: config.thinking,
       onChunk,
       messages: [
+        { role: 'system', content: DIRECT_CASE_PROMPT_V2 },
         { role: 'system', content: DIRECT_KIMI_CASE_SYSTEM_PROMPT },
         { role: 'user', content: buildDirectUserContent(prompt, category) }
       ]
     });
 
-    const finalHtml = extractCode(result.content);
+    let finalHtml = extractCode(result.content);
+    let issues = findHtmlStructuralIssues(finalHtml, prompt, category);
     if (!isUsableHtml(finalHtml)) {
-      throw new Error('已返回内容，但本轮 HTML 不完整，请直接重试');
+      issues = Array.from(new Set(['HTML 可运行性校验未通过', ...issues]));
+    }
+
+    if (issues.length) {
+      setGeneratingStatus('正在自动修复结构与运行问题...');
+      finalHtml = await repairDirectExperiment(prompt, category, finalHtml, issues);
+      const repairedIssues = findHtmlStructuralIssues(finalHtml, prompt, category);
+      if (!isUsableHtml(finalHtml) || repairedIssues.length) {
+        throw new Error(`生成结果未通过校验：${repairedIssues.slice(0, 3).join('；') || 'HTML 仍不完整'}`);
+      }
     }
 
     onDone(finalHtml, {
       spec: {
         title: extractTitle(prompt),
-        summary: prompt.slice(0, 100)
+        summary: prompt.slice(0, 100),
+        userPrompt: prompt,
+        category: category || 'physics'
       },
       review: {
         pass: true,
@@ -1960,7 +2181,7 @@ async function handleGenerate() {
     (content) => {
       chunkCount++;
       if (chunkCount % 8 === 0) {
-        setGeneratingStatus(`正在生成案例... 已输出 ${content.length} 字符`);
+        setGeneratingStatus(`Kimi 正在生成... 已输出 ${content.length} 字符`);
       }
     },
     (code, meta) => {
@@ -2027,7 +2248,7 @@ function showGeneratingState() {
   document.getElementById('generating-state').classList.remove('hidden');
   document.getElementById('preview-iframe').classList.add('hidden');
   document.getElementById('code-view').classList.add('hidden');
-  setGeneratingStatus('正在启动 Kimi 生成...');
+  setGeneratingStatus('Kimi 正在生成...');
 }
 
 function showPreview(code) {

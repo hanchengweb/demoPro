@@ -112,6 +112,27 @@ function sanitizeMessages(messages) {
     }));
 }
 
+function normalizeProviderError(selected, text = '', status = 500) {
+  if (selected?.provider !== 'moonshot') {
+    return text || `${selected?.provider || 'provider'} 请求失败`;
+  }
+
+  if (/engine_overloaded_error|try again later/i.test(text)) {
+    return 'Kimi 当前繁忙，已自动重试多次仍未成功，请稍后再试。';
+  }
+  if (/invalid temperature/i.test(text)) {
+    return 'Kimi 参数校验未通过，已拦截不兼容参数；请重试。';
+  }
+  if (/context length|maximum context|max context/i.test(text)) {
+    return 'Kimi 输入内容过长，请精简提示词或附件后重试。';
+  }
+  if (/rate limit|too many requests/i.test(text)) {
+    return 'Kimi 请求过于频繁，请稍后再试。';
+  }
+
+  return text || 'Kimi 官方接口返回异常，请稍后重试。';
+}
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(publicDir, { index: false }));
 
@@ -140,7 +161,7 @@ app.post('/api/chat', async (req, res) => {
       messages,
       stream = true,
       temperature = 1.0,
-      max_tokens = 8192,
+      max_tokens,
       top_p,
       thinking,
       tools,
@@ -166,14 +187,23 @@ app.post('/api/chat', async (req, res) => {
       model: model || selected.model,
       messages: normalizedMessages,
       stream: stream !== false,
-      max_tokens,
+    };
+
+    if (typeof max_tokens === 'number' && Number.isFinite(max_tokens) && max_tokens > 0) {
+      payload.max_tokens = max_tokens;
     };
 
     if (typeof temperature === 'number') {
-      payload.temperature = temperature;
+      if (selected.provider === 'moonshot') {
+        if (temperature === 1) {
+          payload.temperature = 1;
+        }
+      } else {
+        payload.temperature = temperature;
+      }
     }
 
-    if (typeof top_p === 'number') {
+    if (typeof top_p === 'number' && selected.provider !== 'moonshot') {
       payload.top_p = top_p;
     }
 
@@ -194,7 +224,9 @@ app.post('/api/chat', async (req, res) => {
     let upstream;
     let upstreamErrorText = '';
 
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const maxAttempts = selected.provider === 'moonshot' ? 5 : 3;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       upstream = await fetch(selected.endpoint, {
         method: 'POST',
         headers: {
@@ -211,7 +243,7 @@ app.post('/api/chat', async (req, res) => {
       upstreamErrorText = await upstream.text();
       const shouldRetryMoonshot =
         selected.provider === 'moonshot' &&
-        attempt < 3 &&
+        attempt < maxAttempts &&
         (upstream.status === 429 ||
           upstream.status >= 500 ||
           upstreamErrorText.includes('engine_overloaded_error') ||
@@ -221,13 +253,13 @@ app.post('/api/chat', async (req, res) => {
         break;
       }
 
-      await sleep(900 * attempt);
+      await sleep(selected.provider === 'moonshot' ? 1200 * attempt : 900 * attempt);
     }
 
     if (!upstream.ok) {
       const text = upstreamErrorText;
       res.status(upstream.status).json({
-        error: text || `${selected.provider} 请求失败`,
+        error: normalizeProviderError(selected, text, upstream.status),
         provider: selected.provider,
         model: payload.model,
       });
