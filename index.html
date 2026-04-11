@@ -682,22 +682,22 @@ Quality target:
 
 const DIRECT_KIMI_CASE_SYSTEM_PROMPT = `你是顶级虚拟仿真案例架构师。你的任务是直接生成具备“极高审美上限”和“深度交互逻辑”的通用单文件 HTML。
 
-核心准则（学科中立版）：
-1. 视觉灵魂（现代看板风格）：
+必须遵守的“生存级”执行准则：
+1. 核心渲染层（Mandatory Rendering Layer）：
+   - 禁止使用纯 <div> 或文本来表达仿真过程。
+   - 必须显式声明一个 <canvas id="simCanvas"> 或设计精美的 <svg id="simSvg"> 作为仿真的根视窗。
+   - 所有动画逻辑必须基于此画布/SVG 进行 60fps 的实时渲染。
+2. 视觉灵魂（现代看板风格）：
    - 背景：深色专业科技感（linear-gradient(135deg, #0a0e27 0%, #1a1f4b 100%)）。
-   - 布局：必须实现“主副对比视窗（State A vs State B）”或“多维联动看板”。
+   - 布局：必须实现“主副对比视窗”或“多维联动看板”。
    - 材质：面板统一使用 12px backdrop-blur 玻璃质感，关键节点必须带霓虹发光（Glow）效果。
-2. 交互深度（通用反馈系统）：
-   - 智能悬浮：鼠标悬浮在核心对象（如：传感器、反应器、受力点等）上时，弹出设计精美的 Tooltip，展示其属性、实时状态及 50 字以上的专业原理解析。
-   - 挑战闭环：内置至少 3 个交互挑战（如：参数校准任务、逻辑判断题、排序操作等）。
-   - 响应反馈：正确操作触发粒子礼花；错误操作触发屏幕震动及颜色预警。
-3. 动画逻辑（Class 驱动）：
-   - 核心仿真必须使用 ES6 Class 封装对象（如：Particle, Entity, Node）。
-   - 物理逻辑：基于 requestAnimationFrame，内置具体的数学公式计算（如：运动学、概率分布、流体动力等）。
-4. 实时监控：
-   - 底部必须配备 4-6 个实时变化的数字仪表，数值根据交互状态通过公式动态生成。
+3. 交互深度（通用反馈系统）：
+   - 智能悬浮：必须基于 Canvas 坐标计算实现 Hover 浮窗，展示核心组件的专业参数。
+   - 挑战闭环：内置至少 3 个交互挑战题目，并配备全屏动效正误反馈。
+4. 动画逻辑（ES6 Class 驱动）：
+   - 核心仿真必须使用 ES6 Class 封装对象，内置具体的物理/数学公式计算。
 
-输出要求：只输出源码，严禁任何 markdown 标记，严禁解释。语法完美，模板字符串必须闭合。`;
+输出要求：只输出源码，严禁任何文字解释。语法完美，模板字符串必须闭合。`;
 
 const REVIEW_SYSTEM_PROMPT = `你是虚拟仿真实验质量审查员。
 
@@ -1394,13 +1394,6 @@ async function requestChat({ preset, messages, stream = false, temperature, max_
           if (delta) {
             fullContent += delta;
             if (onChunk) onChunk(fullContent);
-            if (fullContent.length > 2500 && /<\/html>/i.test(fullContent)) {
-              return {
-                content: fullContent,
-                preset: response.headers.get('X-Model-Preset') || preset,
-                provider: response.headers.get('X-Model-Provider') || ''
-              };
-            }
           }
         } catch (error) {}
       }
@@ -1612,7 +1605,7 @@ async function generateExperiment(prompt, category, onChunk, onDone, onError) {
 
     const finalHtml = extractCode(result.content);
     if (!isUsableHtml(finalHtml)) {
-      throw new Error('Kimi 已返回内容，但本轮 HTML 不完整，请直接重试');
+      throw new Error('已返回内容，但本轮 HTML 不完整，请直接重试');
     }
 
     onDone(finalHtml, {
