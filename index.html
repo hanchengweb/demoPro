@@ -589,11 +589,11 @@ const MODEL_PREFERENCE = {
 const STAGE_CONFIG = {
   optimize: { max_tokens: 4000, timeout: 0, thinking: { type: 'disabled' } },
   spec: { max_tokens: 8000, timeout: 0, thinking: { type: 'disabled' } },
-  fastGenerate: { max_tokens: null, timeout: 0, thinking: { type: 'enabled', budget_tokens: 2048 } },
-  generate: { max_tokens: null, timeout: 0, thinking: { type: 'enabled', budget_tokens: 4096 } },
-  directGenerate: { max_tokens: null, timeout: 0, thinking: { type: 'enabled', budget_tokens: 4096 } },
+  fastGenerate: { max_tokens: null, timeout: 0, thinking: { type: 'disabled' } },
+  generate: { max_tokens: null, timeout: 0, thinking: { type: 'disabled' } },
+  directGenerate: { max_tokens: null, timeout: 0, thinking: { type: 'disabled' } },
   review: { max_tokens: 4000, timeout: 0, thinking: { type: 'disabled' } },
-  repair: { max_tokens: null, timeout: 0, thinking: { type: 'enabled', budget_tokens: 2048 } }
+  repair: { max_tokens: null, timeout: 0, thinking: { type: 'disabled' } }
 };
 
 const GENERATION_POLICY = {
@@ -815,6 +815,57 @@ Repair goals:
 
 Return source code only, beginning with <!DOCTYPE html>.`;
 
+const MEDICAL_CASE_BLUEPRINT_SYSTEM = `你是医学虚拟仿真总设计师。你的任务不是直接写 HTML，而是先把医学案例理解透，再输出一份极简但高质量的“医学案例蓝图 JSON”。
+
+目标：
+1. 帮模型先完成病理/生理机制理解。
+2. 明确最适合该题目的视觉主轴、交互主轴、指标主轴。
+3. 默认面向“可直接展示给老板”的成品级医学仿真，不是教程页，不是原型图。
+
+蓝图原则：
+- 优先选择“机制对照 + 指标联动 + 交互挑战”的结构。
+- 如果题目适合对照展示，优先使用“正常/异常”或“治疗前/治疗后”双场景。
+- 所有用户可见文案默认使用简体中文，仅保留必要专业缩写和单位。
+- 文案简洁，画面先行，重点突出医学机制而不是堆字。
+- 控件数量克制但有效，每个控件都必须驱动画面和指标变化。
+- Tooltip 必须围绕真实医学对象或真实指标，不要做假提示。
+
+只输出合法 JSON，不要解释，不要 Markdown。
+
+JSON 结构：
+{
+  "title": "案例标题",
+  "medicalTheme": "主题方向",
+  "coreMechanism": ["核心机制1", "核心机制2"],
+  "sceneStrategy": {
+    "layout": "single-focus|dual-contrast|dashboard",
+    "mainScene": "主场景说明",
+    "comparisonScene": "如适用则填写对照场景，否则空字符串"
+  },
+  "visualDirection": {
+    "tone": "深色临床驾驶舱|病理粒子动画|精密监护仪风格",
+    "mustHave": ["必须出现的关键视觉对象1", "关键视觉对象2"],
+    "avoid": ["应避免的低质表现1", "应避免的低质表现2"]
+  },
+  "controls": [
+    { "name": "控件名", "type": "slider|button|toggle", "effect": "影响什么机制或指标" }
+  ],
+  "metrics": ["指标1", "指标2", "指标3"],
+  "tooltips": [
+    { "target": "对象或指标", "label": "中文标签", "explanation": "简短专业解释" }
+  ],
+  "challenges": [
+    { "title": "挑战1", "goal": "挑战目标", "successSignal": "成功反馈" },
+    { "title": "挑战2", "goal": "挑战目标", "successSignal": "成功反馈" },
+    { "title": "挑战3", "goal": "挑战目标", "successSignal": "成功反馈" }
+  ],
+  "uiLanguageRules": [
+    "所有界面标题使用简体中文",
+    "只允许保留必要的专业缩写与单位"
+  ],
+  "deliveryFocus": ["最该优先做好的成品点1", "最该优先做好的成品点2"]
+}`;
+
 // ===== STATE =====
 let state = {
   user: null,
@@ -866,6 +917,7 @@ const TEXT_ASSET_EXTENSIONS = ['txt', 'md', 'html', 'json', 'csv', 'js', 'ts', '
 const MAX_IMAGE_SIZE = 4 * 1024 * 1024;
 const MAX_TEXT_SIZE = 200 * 1024;
 const MAX_TEXT_CHARS = 12000;
+const KIMI_THINKING_MIN_TOKENS = 16384;
 
 function triggerAssetUpload() {
   const input = document.getElementById('asset-input');
@@ -991,6 +1043,87 @@ function buildDirectUserContent(prompt, category) {
   ];
 }
 
+function isMedicalCase(category, prompt = '') {
+  if (category === 'medicine') return true;
+  return /肺|心脏|血液|呼吸|病理|药代|炎症|水肿|器官|临床|生理|医学/.test(String(prompt || ''));
+}
+
+function shouldUseKimiThinking() {
+  return false;
+}
+
+function buildMedicalBlueprintUserContent(prompt, category) {
+  const categoryHint = getCategoryContext(category);
+  const textAssets = state.uploadedAssets.filter((asset) => asset.kind === 'text');
+  const imageAssets = state.uploadedAssets.filter((asset) => asset.kind === 'image');
+  const blocks = [
+    `${categoryHint}\n用户需求：${prompt}`,
+    '请先理解该医学案例最关键的病理/生理机制，再规划最适合成品化展示的画面结构、交互结构、指标结构与中文术语体系。',
+    '以“高质感医学驾驶舱 + 真实机制动画 + 简洁中文指标面板 + 有效挑战反馈”为优先目标。',
+    '如果适合对照展示，优先规划正常/异常或治疗前/治疗后双场景。'
+  ];
+
+  if (textAssets.length) {
+    blocks.push(`以下是用户上传的参考文件内容，请先吸收后再输出医学案例蓝图：\n${textAssets.map((asset) => `【${asset.name}】\n${asset.text}`).join('\n\n')}`);
+  }
+
+  if (!imageAssets.length) {
+    return blocks.join('\n\n');
+  }
+
+  return [
+    { type: 'text', text: `${blocks.join('\n\n')}\n\n以下还附带参考图片，请结合其视觉完成蓝图规划。` },
+    ...imageAssets.map((asset) => ({
+      type: 'image_url',
+      image_url: { url: asset.dataUrl }
+    }))
+  ];
+}
+
+async function buildMedicalCaseBlueprint(prompt, category, onProgress) {
+  const config = STAGE_CONFIG.spec;
+  const preset = await ensureAvailableModel('生成医学案例蓝图', MODEL_PREFERENCE.spec);
+  const content = await requestChatText({
+    preset: preset.id,
+    stream: true,
+    max_tokens: Math.max(KIMI_THINKING_MIN_TOKENS, Number(config.max_tokens) || 0),
+    timeout: config.timeout,
+    thinking: { type: 'disabled' },
+    onChunk: onProgress,
+    messages: [
+      { role: 'system', content: MEDICAL_CASE_BLUEPRINT_SYSTEM },
+      { role: 'user', content: buildMedicalBlueprintUserContent(prompt, category) }
+    ]
+  });
+
+  const blueprint = extractJson(content);
+  blueprint.title = blueprint.title || extractTitle(prompt);
+  blueprint.medicalTheme = blueprint.medicalTheme || getCategoryContext(category) || '医学机制仿真';
+  blueprint.coreMechanism = Array.isArray(blueprint.coreMechanism) ? blueprint.coreMechanism : [];
+  blueprint.metrics = Array.isArray(blueprint.metrics) ? blueprint.metrics : [];
+  blueprint.deliveryFocus = Array.isArray(blueprint.deliveryFocus) ? blueprint.deliveryFocus : [];
+  blueprint.uiLanguageRules = Array.isArray(blueprint.uiLanguageRules) ? blueprint.uiLanguageRules : ['所有界面标题使用简体中文'];
+  return { blueprint, preset };
+}
+
+function attachMedicalBlueprintToUserContent(baseContent, blueprint) {
+  if (!blueprint) return baseContent;
+  const blueprintText = `以下是该医学案例的预理解蓝图，请严格对齐后再生成最终 HTML：\n${JSON.stringify(blueprint, null, 2)}`;
+
+  if (typeof baseContent === 'string') {
+    return `${baseContent}\n\n${blueprintText}`;
+  }
+
+  if (Array.isArray(baseContent) && baseContent.length > 0 && baseContent[0]?.type === 'text') {
+    return [
+      { ...baseContent[0], text: `${baseContent[0].text}\n\n${blueprintText}` },
+      ...baseContent.slice(1)
+    ];
+  }
+
+  return baseContent;
+}
+
 function getCategoryContext(category) {
   const catInfo = CATEGORIES.find(c => c.id === category);
   if (!catInfo) return '';
@@ -1079,16 +1212,34 @@ function findHtmlStructuralIssues(html, prompt = '', category = '') {
   return issues;
 }
 
-async function repairDirectExperiment(prompt, category, html, issues) {
+function getCriticalStructuralIssues(issues = []) {
+  const criticalPatterns = [
+    /缺少完整的 HTML 文档起始结构/,
+    /缺少 HTML 结束标签/,
+    /缺少脚本逻辑层/,
+    /缺少真实仿真渲染层/,
+    /缺少持续更新的动画循环/,
+    /存在注释吞掉后续可执行代码的风险/,
+    /可能存在 width 或 height 作用域错误/,
+    /页面主结构过空/,
+    /事件绑定初始化可能不稳定/,
+    /缺少 body 结束标签/,
+    /HTML 可运行性校验未通过/
+  ];
+
+  return issues.filter((issue) => criticalPatterns.some((pattern) => pattern.test(issue)));
+}
+
+async function repairDirectExperiment(prompt, category, html, issues, blueprint = null, onProgress) {
   const config = STAGE_CONFIG.repair;
   const preset = await ensureAvailableModel('修复实验', MODEL_PREFERENCE.repair);
   const content = await requestChatText({
     preset: preset.id,
-    stream: false,
+    stream: true,
     max_tokens: config.max_tokens,
     timeout: config.timeout,
-    temperature: 0.8,
     thinking: config.thinking,
+    onChunk: onProgress,
     messages: [
       { role: 'system', content: DIRECT_REPAIR_PROMPT_V2 },
       {
@@ -1097,6 +1248,7 @@ async function repairDirectExperiment(prompt, category, html, issues) {
           `用户需求：${prompt}`,
           getCategoryContext(category),
           buildDirectGenerationRequirements(prompt, category),
+          blueprint ? `医学案例蓝图：\n${JSON.stringify(blueprint, null, 2)}` : '',
           `请优先修复这些问题：\n- ${issues.join('\n- ')}`,
           `当前 HTML：\n${extractCode(html)}`
         ].filter(Boolean).join('\n\n')
@@ -1796,19 +1948,30 @@ async function generateExperiment(prompt, category, onChunk, onDone, onError) {
     }
     setGeneratingStatus(`Kimi 正在生成... (${preset.label || preset.id})`);
 
+    let medicalBlueprint = null;
+    if (isMedicalCase(category, prompt)) {
+      setGeneratingStatus('Kimi 正在理解案例...');
+      const blueprintResult = await buildMedicalCaseBlueprint(prompt, category, (content) => {
+        if (content.length > 1200) {
+          setGeneratingStatus('Kimi 正在理解案例...');
+        }
+      });
+      medicalBlueprint = blueprintResult.blueprint;
+    }
+    const useThinking = false;
+    setGeneratingStatus(`Kimi 正在生成... (${preset.label || preset.id})`);
+
     const result = await requestChat({
       preset: preset.id,
       stream: true,
       max_tokens: config.max_tokens,
       timeout: config.timeout,
-      temperature: 0.85,
-      top_p: 0.9,
-      thinking: config.thinking,
+      thinking: { type: 'disabled' },
       onChunk,
       messages: [
         { role: 'system', content: DIRECT_CASE_PROMPT_V2 },
         { role: 'system', content: DIRECT_KIMI_CASE_SYSTEM_PROMPT },
-        { role: 'user', content: buildDirectUserContent(prompt, category) }
+        { role: 'user', content: attachMedicalBlueprintToUserContent(buildDirectUserContent(prompt, category), medicalBlueprint) }
       ]
     });
 
@@ -1817,10 +1980,15 @@ async function generateExperiment(prompt, category, onChunk, onDone, onError) {
     if (!isUsableHtml(finalHtml)) {
       issues = Array.from(new Set(['HTML 可运行性校验未通过', ...issues]));
     }
+    const criticalIssues = getCriticalStructuralIssues(issues);
 
-    if (issues.length) {
-      setGeneratingStatus('正在自动修复结构与运行问题...');
-      finalHtml = await repairDirectExperiment(prompt, category, finalHtml, issues);
+    if (criticalIssues.length) {
+      setGeneratingStatus('Kimi 正在修复细节...');
+      finalHtml = await repairDirectExperiment(prompt, category, finalHtml, criticalIssues, medicalBlueprint, (content) => {
+        if (content.length > 1000) {
+          setGeneratingStatus('Kimi 正在修复细节...');
+        }
+      });
       const repairedIssues = findHtmlStructuralIssues(finalHtml, prompt, category);
       if (!isUsableHtml(finalHtml) || repairedIssues.length) {
         throw new Error(`生成结果未通过校验：${repairedIssues.slice(0, 3).join('；') || 'HTML 仍不完整'}`);

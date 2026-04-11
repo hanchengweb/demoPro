@@ -193,14 +193,8 @@ app.post('/api/chat', async (req, res) => {
       payload.max_tokens = max_tokens;
     };
 
-    if (typeof temperature === 'number') {
-      if (selected.provider === 'moonshot') {
-        if (temperature === 1) {
-          payload.temperature = 1;
-        }
-      } else {
-        payload.temperature = temperature;
-      }
+    if (typeof temperature === 'number' && selected.provider !== 'moonshot') {
+      payload.temperature = temperature;
     }
 
     if (typeof top_p === 'number' && selected.provider !== 'moonshot') {
