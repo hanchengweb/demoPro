@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>膝关节解剖大师 Pro - 真实解剖图谱互动教学</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans SC', 'Inter', sans-serif;
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            min-height: 100vh;
+        }
+        
+        .anatomy-container {
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+        }
+        
+        .hotspot {
+            position: absolute;
+            cursor: pointer;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(99,102,241,0.8) 0%, rgba(79,70,229,0.4) 100%);
+            border: 3px solid rgba(255,255,255,0.9);
+            box-shadow: 0 0 20px rgba(99,102,241,0.6), inset 0 0 10px rgba(255,255,255,0.3);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+            z-index: 10;
+        }
+        
+        .hotspot:hover {
+            transform: scale(1.3);
+            background: radial-gradient(circle, rgba(168,85,247,0.9) 0%, rgba(147,51,234,0.5) 100%);
+            box-shadow: 0 0 30px rgba(168,85,247,0.8);
+            animation: none;
+        }
+        
+        .hotspot.active {
+            background: radial-gradient(circle, rgba(34,197,94,0.9) 0%, rgba(21,128,61,0.5) 100%);
+            border-color: #22c55e;
+            box-shadow: 0 0 25px rgba(34,197,94,0.8);
+            animation: none;
+            transform: scale(1.2);
+        }
+        
+        .hotspot.correct {
+            background: radial-gradient(circle, #22c55e 0%, #16a34a 100%) !important;
+            border-color: #15803d;
+            animation: correct-pulse 0.6s ease;
+        }
+        
+        .hotspot.wrong {
+            background: radial-gradient(circle, #ef4444 0%, #dc2626 100%) !important;
+            border-color: #b91c1c;
+            animation: shake 0.5s ease;
+        }
+        
+        .hotspot-number {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            pointer-events: none;
+        }
+        
+        @keyframes pulse-ring {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        @keyframes correct-pulse {
+            0% { transform: scale(1.2); }
+            50% { transform: scale(1.5); box-shadow: 0 0 40px rgba(34,197,94,1); }
+            100% { transform: scale(1.2); }
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0) scale(1); }
+            25% { transform: translateX(-5px) scale(1); }
+            75% { transform: translateX(5px) scale(1); }
+        }
+        
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .info-card {
+            background: linear-gradient(135deg, rgba(51, 65, 85, 0.9) 0%, rgba(30, 41, 59, 0.9) 100%);
+            border-left: 4px solid #6366f1;
+        }
+        
+        .mode-btn {
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .mode-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .mode-btn:hover::before {
+            left: 100%;
+        }
+        
+        .mode-btn.active {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+            box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4);
+            transform: translateY(-2px);
+        }
+        
+        .structure-label {
+            position: absolute;
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            white-space: nowrap;
+            z-index: 20;
+            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        
+        .structure-label::after {
+            content: '';
+            position: absolute;
+            bottom: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 6px 6px 0;
+            border-style: solid;
+            border-color: rgba(0,0,0,0.85) transparent transparent;
+        }
+        
+        .progress-bar {
+            background: linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%);
+            transition: width 0.5s ease;
+        }
+        
+        .quiz-highlight {
+            animation: target-bounce 2s infinite;
+            background: radial-gradient(circle, rgba(234,179,8,0.9) 0%, rgba(202,138,4,0.6) 100%) !important;
+            border-color: #eab308;
+            box-shadow: 0 0 30px rgba(234,179,8,0.8);
+        }
+        
+        @keyframes target-bounce {
+            0%, 100% { transform: scale(1.2); }
+            50% { transform: scale(1.4); }
+        }
+        
+        .x-ray-mode {
+            filter: contrast(1.2) brightness(0.9) grayscale(0.3);
+        }
+        
+        .label-line {
+            position: absolute;
+            background: rgba(99,102,241,0.6);
+            height: 2px;
+            transform-origin: left center;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+    </style>
+</head>
+<body class="text-gray-100 p-4 md:p-6">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <header class="text-center mb-6">
+            <div class="inline-flex items-center gap-3 mb-2 bg-white/10 px-6 py-2 rounded-full backdrop-blur-sm border border-white/20">
+                <span class="text-3xl">🦴</span>
+                <div>
+                    <h1 class="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-200 via-purple-200 to-pink-200">
+                        膝关节解剖大师 Pro
+                    </h1>
+                    <p class="text-sm text-gray-400">基于真实解剖图谱的互动教学系统</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Mode Selection -->
+        <div class="flex justify-center gap-4 mb-6">
+            <button onclick="setMode('study')" id="btn-study" class="mode-btn active px-8 py-3 rounded-full font-semibold bg-slate-700 text-gray-200 border border-slate-600 shadow-lg">
+                <span class="mr-2">📚</span>学习模式
+                <span class="block text-xs font-normal opacity-70 mt-1">探索各部位详情</span>
+            </button>
+            <button onclick="setMode('quiz')" id="btn-quiz" class="mode-btn px-8 py-3 rounded-full font-semibold bg-slate-700 text-gray-200 border border-slate-600 shadow-lg">
+                <span class="mr-2">🎮</span>测验模式
+                <span class="block text-xs font-normal opacity-70 mt-1">检验学习成果</span>
+            </button>
+            <button onclick="toggleXray()" id="btn-xray" class="mode-btn px-6 py-3 rounded-full font-semibold bg-slate-700 text-gray-200 border border-slate-600 shadow-lg">
+                <span class="mr-2">🔍</span>X光视图
+            </button>
+        </div>
+
+        <!-- Main Content -->
+        <div class="grid lg:grid-cols-5 gap-6">
+            <!-- Anatomy Image Area -->
+            <div class="lg:col-span-3">
+                <div class="glass-panel rounded-3xl p-4 shadow-2xl relative">
+                    <div class="absolute top-4 right-4 z-20 flex gap-2">
+                        <div class="bg-slate-800/90 px-4 py-2 rounded-full text-sm font-bold border border-slate-700 shadow-lg backdrop-blur">
+                            <span class="text-purple-400">得分:</span> <span id="score">0</span>
+                        </div>
+                        <div class="bg-slate-800/90 px-4 py-2 rounded-full text-sm font-bold border border-slate-700 shadow-lg backdrop-blur">
+                            <span class="text-blue-400">进度:</span> <span id="progress">0</span>/11
+                        </div>
+                    </div>
+
+                    <div class="anatomy-container w-full flex justify-center" id="anatomy-wrapper">
+                        <!-- High Quality Anatomy Image -->
+                        <img src="https://kimi-web-img.moonshot.cn/img/www.uptodate.com/47419162dfb4e0d970b73ba6a290ff1e9a346e5a.jpg" 
+                             alt="膝关节解剖图" 
+                             class="w-full max-w-[600px] h-auto rounded-xl shadow-2xl select-none"
+                             id="anatomy-img"
+                             style="display: block;"
+                             oncontextmenu="return false;">
+                        
+                        <!-- Interactive Hotspots - Coordinates based on 600x800 image -->
+                        <!-- 1. Femur (upper bone) -->
+                        <div class="hotspot" style="left: 48%; top: 12%; width: 40px; height: 40px;" data-id="1" onclick="handleClick(1)">
+                            <span class="hotspot-number">1</span>
+                        </div>
+                        <div class="structure-label" style="left: 48%; top: 5%;" data-label="1">股骨 (Femur)</div>
+                        
+                        <!-- 2. Lateral Femoral Condyle -->
+                        <div class="hotspot" style="left: 38%; top: 28%; width: 35px; height: 35px;" data-id="2" onclick="handleClick(2)">
+                            <span class="hotspot-number">2</span>
+                        </div>
+                        <div class="structure-label" style="left: 25%; top: 22%;" data-label="2">股骨外侧髁</div>
+                        
+                        <!-- 3. ACL -->
+                        <div class="hotspot" style="left: 52%; top: 35%; width: 30px; height: 30px;" data-id="3" onclick="handleClick(3)">
+                            <span class="hotspot-number">3</span>
+                        </div>
+                        <div class="structure-label" style="left: 60%; top: 30%;" data-label="3">前交叉韧带 (ACL)</div>
+                        
+                        <!-- 4. PCL -->
+                        <div class="hotspot" style="left: 48%; top: 38%; width: 30px; height: 30px;" data-id="4" onclick="handleClick(4)">
+                            <span class="hotspot-number">4</span>
+                        </div>
+                        <div class="structure-label" style="left: 35%; top: 42%;" data-label="4">后交叉韧带 (PCL)</div>
+                        
+                        <!-- 5. Lateral Meniscus -->
+                        <div class="hotspot" style="left: 35%; top: 45%; width: 32px; height: 32px;" data-id="5" onclick="handleClick(5)">
+                            <span class="hotspot-number">5</span>
+                        </div>
+                        <div class="structure-label" style="left: 20%; top: 48%;" data-label="5">外侧半月板</div>
+                        
+                        <!-- 6. Medial Meniscus -->
+                        <div class="hotspot" style="left: 62%; top: 45%; width: 32px; height: 32px;" data-id="6" onclick="handleClick(6)">
+                            <span class="hotspot-number">6</span>
+                        </div>
+                        <div class="structure-label" style="left: 70%; top: 48%;" data-label="6">内侧半月板</div>
+                        
+                        <!-- 7. Lateral Tibial Condyle -->
+                        <div class="hotspot" style="left: 38%; top: 52%; width: 35px; height: 35px;" data-id="7" onclick="handleClick(7)">
+                            <span class="hotspot-number">7</span>
+                        </div>
+                        <div class="structure-label" style="left: 25%; top: 58%;" data-label="7">胫骨外侧平台</div>
+                        
+                        <!-- 8. Medial Tibial Condyle -->
+                        <div class="hotspot" style="left: 58%; top: 52%; width: 35px; height: 35px;" data-id="8" onclick="handleClick(8)">
+                            <span class="hotspot-number">8</span>
+                        </div>
+                        <div class="structure-label" style="left: 70%; top: 58%;" data-label="8">胫骨内侧平台</div>
+                        
+                        <!-- 9. Fibula Head -->
+                        <div class="hotspot" style="left: 28%; top: 55%; width: 30px; height: 30px;" data-id="9" onclick="handleClick(9)">
+                            <span class="hotspot-number">9</span>
+                        </div>
+                        <div class="structure-label" style="left: 15%; top: 50%;" data-label="9">腓骨头</div>
+                        
+                        <!-- 10. Patellar Ligament -->
+                        <div class="hotspot" style="left: 50%; top: 72%; width: 30px; height: 40px;" data-id="10" onclick="handleClick(10)">
+                            <span class="hotspot-number">10</span>
+                        </div>
+                        <div class="structure-label" style="left: 65%; top: 75%;" data-label="10">髌韧带</div>
+                        
+                        <!-- 11. Patella -->
+                        <div class="hotspot" style="left: 50%; top: 22%; width: 40px; height: 35px;" data-id="11" onclick="handleClick(11)">
+                            <span class="hotspot-number">11</span>
+                        </div>
+                        <div class="structure-label" style="left: 65%; top: 18%;" data-label="11">髌骨 (膝盖骨)</div>
+                    </div>
+
+                    <div class="mt-4 text-center text-sm text-gray-400 bg-slate-800/50 py-2 rounded-lg border border-slate-700">
+                        💡 提示：点击彩色圆点查看详情，或在测验模式下寻找指定结构
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info/Quiz Panel -->
+            <div class="lg:col-span-2 space-y-4">
+                <!-- Study Panel -->
+                <div id="study-panel" class="glass-panel rounded-3xl p-6 h-full">
+                    <div class="flex items-center gap-3 mb-6">
+                        <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-2xl shadow-lg">
+                            🎯
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-bold text-white">结构详情</h2>
+                            <p class="text-sm text-gray-400">点击左侧热点查看解剖信息</p>
+                        </div>
+                    </div>
+
+                    <div id="default-info" class="text-gray-300 space-y-4">
+                        <div class="bg-slate-800/50 rounded-xl p-6 border border-slate-700 text-center">
+                            <div class="text-5xl mb-4">🔬</div>
+                            <h3 class="text-lg font-semibold text-white mb-2">准备好探索膝关节了吗？</h3>
+                            <p class="text-sm leading-relaxed">膝关节是人体最大、最复杂的滑膜关节，由股骨、胫骨、髌骨及多条韧带、半月板组成。</p>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-slate-800/30 p-3 rounded-lg border border-slate-700/50 text-center">
+                                <div class="text-2xl mb-1">🦴</div>
+                                <p class="text-xs text-gray-400">3块骨骼</p>
+                            </div>
+                            <div class="bg-slate-800/30 p-3 rounded-lg border border-slate-700/50 text-center">
+                                <div class="text-2xl mb-1">🔗</div>
+                                <p class="text-xs text-gray-400">4条主要韧带</p>
+                            </div>
+                            <div class="bg-slate-800/30 p-3 rounded-lg border border-slate-700/50 text-center">
+                                <div class="text-2xl mb-1">🥏</div>
+                                <p class="text-xs text-gray-400">2个半月板</p>
+                            </div>
+                            <div class="bg-slate-800/30 p-3 rounded-lg border border-slate-700/50 text-center">
+                                <div class="text-2xl mb-1">⚡</div>
+                                <p class="text-xs text-gray-400">承重+灵活</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="detail-info" class="hidden space-y-4">
+                        <div class="info-card rounded-2xl p-5 shadow-xl">
+                            <div class="flex items-start justify-between mb-4">
+                                <div>
+                                    <span id="detail-number" class="inline-block bg-indigo-600 text-white text-sm font-bold px-3 py-1 rounded-full mb-2">1</span>
+                                    <h3 id="detail-name" class="text-2xl font-bold text-white mb-1">股骨</h3>
+                                    <p id="detail-en" class="text-sm text-indigo-300 italic">Femur</p>
+                                </div>
+                                <div class="w-16 h-16 rounded-2xl bg-slate-700 flex items-center justify-center text-3xl border border-slate-600">
+                                    <span id="detail-icon">🦴</span>
+                                </div>
+                            </div>
+                            
+                            <div class="space-y-4">
+                                <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                                    <h4 class="text-sm font-semibold text-purple-300 mb-2 flex items-center gap-2">
+                                        <span>📍</span> 解剖位置
+                                    </h4>
+                                    <p id="detail-location" class="text-sm text-gray-300 leading-relaxed">人体最长最强壮的长骨，上端与髋臼形成髋关节，下端与胫骨形成膝关节。</p>
+                                </div>
+
+                                <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                                    <h4 class="text-sm font-semibold text-blue-300 mb-2 flex items-center gap-2">
+                                        <span>⚙️</span> 功能作用
+                                    </h4>
+                                    <p id="detail-function" class="text-sm text-gray-300 leading-relaxed">支撑体重，传递负荷；下端内外侧髁与胫骨平台形成关节面，参与屈伸运动。</p>
+                                </div>
+
+                                <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                                    <h4 class="text-sm font-semibold text-green-300 mb-2 flex items-center gap-2">
+                                        <span>🏥</span> 临床相关
+                                    </h4>
+                                    <p id="detail-clinical" class="text-sm text-gray-300 leading-relaxed">股骨髁骨折、骨关节炎常见部位；老年人骨质疏松易发生股骨颈骨折。</p>
+                                </div>
+
+                                <div class="bg-gradient-to-r from-indigo-900/50 to-purple-900/50 rounded-xl p-4 border border-indigo-700/30">
+                                    <h4 class="text-sm font-semibold text-indigo-300 mb-2 flex items-center gap-2">
+                                        <span>💡</span> 记忆技巧
+                                    </h4>
+                                    <p id="detail-tip" class="text-sm text-indigo-200 leading-relaxed">"股骨"——"股"即大腿，是人体最粗的骨头，像一根柱子支撑上半身。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quiz Panel -->
+                <div id="quiz-panel" class="glass-panel rounded-3xl p-6 h-full hidden">
+                    <div class="flex items-center gap-3 mb-6">
+                        <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-2xl shadow-lg animate-pulse">
+                            ❓
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-bold text-white">解剖测验</h2>
+                            <p class="text-sm text-gray-400">找出高亮显示的结构</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-gradient-to-br from-purple-900/40 to-indigo-900/40 rounded-2xl p-6 border border-purple-500/30 mb-6 text-center relative overflow-hidden">
+                        <div class="absolute inset-0 bg-purple-500/10 animate-pulse"></div>
+                        <p class="text-sm text-purple-300 mb-2 relative z-10">请找出：</p>
+                        <h3 id="quiz-target" class="text-3xl font-bold text-white mb-2 relative z-10">前交叉韧带</h3>
+                        <p id="quiz-target-en" class="text-sm text-purple-200 italic relative z-10">Anterior Cruciate Ligament</p>
+                        <div class="mt-4 inline-flex items-center gap-2 bg-black/30 px-4 py-2 rounded-full relative z-10">
+                            <span class="w-2 h-2 bg-yellow-400 rounded-full animate-bounce"></span>
+                            <span class="text-xs text-gray-300">寻找黄色闪烁的热点</span>
+                        </div>
+                    </div>
+
+                    <div id="quiz-feedback" class="hidden mb-4 rounded-xl p-4 text-center font-bold border"></div>
+
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center text-sm">
+                            <span class="text-gray-400">题目进度</span>
+                            <span class="text-white font-bold"><span id="quiz-current">1</span> / 11</span>
+                        </div>
+                        <div class="w-full bg-slate-700 rounded-full h-3 overflow-hidden border border-slate-600">
+                            <div id="quiz-progress" class="progress-bar h-full rounded-full" style="width: 9%"></div>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-3 mt-4">
+                            <div class="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
+                                <p class="text-xs text-gray-400">正确</p>
+                                <p id="correct-count" class="text-2xl font-bold text-green-400">0</p>
+                            </div>
+                            <div class="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
+                                <p class="text-xs text-gray-400">连续答对</p>
+                                <p id="streak-count" class="text-2xl font-bold text-yellow-400">0</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button onclick="nextQuestion()" id="next-btn" class="hidden w-full mt-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-bold hover:from-indigo-500 hover:to-purple-500 transition shadow-lg border border-indigo-500/50">
+                        下一题 →
+                    </button>
+                    
+                    <button onclick="resetQuiz()" class="w-full mt-3 py-2 text-gray-500 text-sm hover:text-gray-300 transition border border-slate-700 rounded-lg hover:bg-slate-800">
+                        重新开始测验
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Anatomy Legend -->
+        <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="glass-panel rounded-2xl p-4 border border-slate-700 hover:border-slate-500 transition group">
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="w-10 h-10 rounded-xl bg-gray-200 flex items-center justify-center text-xl shadow-lg group-hover:scale-110 transition">🦴</div>
+                    <div>
+                        <p class="font-bold text-white text-sm">骨骼系统</p>
+                        <p class="text-xs text-gray-400">股骨/胫骨/髌骨/腓骨</p>
+                    </div>
+                </div>
+                <div class="h-1 w-full bg-gray-600 rounded-full overflow-hidden">
+                    <div class="h-full bg-gray-400 w-full"></div>
+                </div>
+            </div>
+
+            <div class="glass-panel rounded-2xl p-4 border border-red-900/30 hover:border-red-500/50 transition group">
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="w-10 h-10 rounded-xl bg-red-900/50 flex items-center justify-center text-xl shadow-lg border border-red-700/50 group-hover:scale-110 transition">🔗</div>
+                    <div>
+                        <p class="font-bold text-white text-sm">韧带系统</p>
+                        <p class="text-xs text-gray-400">ACL/PCL/侧副韧带</p>
+                    </div>
+                </div>
+                <div class="h-1 w-full bg-red-900/30 rounded-full overflow-hidden">
+                    <div class="h-full bg-red-500 w-full"></div>
+                </div>
+            </div>
+
+            <div class="glass-panel rounded-2xl p-4 border border-blue-900/30 hover:border-blue-500/50 transition group">
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="w-10 h-10 rounded-xl bg-blue-900/50 flex items-center justify-center text-xl shadow-lg border border-blue-700/50 group-hover:scale-110 transition">🥏</div>
+                    <div>
+                        <p class="font-bold text-white text-sm">半月板</p>
+                        <p class="text-xs text-gray-400">内侧/外侧半月板</p>
+                    </div>
+                </div>
+                <div class="h-1 w-full bg-blue-900/30 rounded-full overflow-hidden">
+                    <div class="h-full bg-blue-500 w-full"></div>
+                </div>
+            </div>
+
+            <div class="glass-panel rounded-2xl p-4 border border-green-900/30 hover:border-green-500/50 transition group">
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="w-10 h-10 rounded-xl bg-green-900/50 flex items-center justify-center text-xl shadow-lg border border-green-700/50 group-hover:scale-110 transition">🏆</div>
+                    <div>
+                        <p class="font-bold text-white text-sm">掌握目标</p>
+                        <p class="text-xs text-gray-400">识别全部11个结构</p>
+                    </div>
+                </div>
+                <div class="h-1 w-full bg-green-900/30 rounded-full overflow-hidden">
+                    <div id="legend-progress" class="h-full bg-green-500 w-0 transition-all duration-500"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Comprehensive Anatomy Data
+        const anatomyData = {
+            1: {
+                name: "股骨",
+                en: "Femur",
+                icon: "🦴",
+                location: "人体最长、最强壮的长骨，位于大腿部。上端与髋臼形成髋关节，下端内外侧髁与胫骨平台形成膝关节。",
+                function: "支撑体重，传递上身负荷至下肢；股骨下端内外侧髁参与膝关节屈伸运动，是主要的承重结构。",
+                clinical: "股骨远端骨折常见于高能量创伤；股骨髁易发生骨关节炎、软骨磨损；老年人骨质疏松常导致股骨颈骨折。",
+                tip: "想象它是一根'超级顶梁柱'，支撑着整个上半身的重量。",
+                category: "bone"
+            },
+            2: {
+                name: "股骨外侧髁",
+                en: "Lateral Femoral Condyle",
+                icon: "🦴",
+                location: "股骨下端外侧的球形突起，较内侧髁更突出，与胫骨平台外侧形成关节面。",
+                function: "与外侧半月板、胫骨外侧平台共同组成膝关节外侧间室，承受体重外侧负荷，参与屈伸和轻度旋转。",
+                clinical: "外侧髁骨关节炎相对较少；前交叉韧带附着于外侧髁内侧面，是ACL损伤时的撞击部位。",
+                tip: "'外侧'即远离身体中线的一侧（靠外），比内侧髁更向前突出。",
+                category: "bone"
+            },
+            3: {
+                name: "前交叉韧带",
+                en: "Anterior Cruciate Ligament (ACL)",
+                icon: "🔗",
+                location: "起自胫骨髁间隆起前方，斜向后外上方，附着于股骨外侧髁内侧面。位于膝关节中心。",
+                function: "限制胫骨前移，防止膝关节过伸；与PCL交叉形成'十'字，维持膝关节前后稳定性。",
+                clinical: "运动损伤中最常断裂的韧带（尤其是足球、篮球、滑雪），占膝关节损伤的50%以上。",
+                tip: "'前'即更靠近身体前方，从胫骨前侧连向股骨外侧髁后侧，像一根斜拉索。",
+                category: "ligament"
+            },
+            4: {
+                name: "后交叉韧带",
+                en: "Posterior Cruciate Ligament (PCL)",
+                icon: "🔗",
+                location: "起自胫骨髁间隆起后方，斜向前内上方，附着于股骨内侧髁外侧面。比ACL粗大。",
+                function: "限制胫骨后移，防止膝关节过屈；是膝关节最强的韧带，承受最大张力。",
+                clinical: "'仪表盘损伤'常见于车祸（膝盖撞击仪表盘）；单独损伤较少见，常合并其他结构损伤。",
+                tip: "'后'即靠近身体后方，比ACL粗大（强度约2倍），像一根粗绳索。",
+                category: "ligament"
+            },
+            5: {
+                name: "外侧半月板",
+                en: "Lateral Meniscus",
+                icon: "🥏",
+                location: "位于股骨外侧髁与胫骨外侧平台之间的C形纤维软骨盘，较小且活动度大。",
+                function: "缓冲震荡、分散负荷、增加关节稳定性；润滑关节，提供营养。承受外侧冲击力。",
+                clinical: "外侧半月板损伤较少见（占20%），因其活动度大不易卡压；但先天性盘状半月板易损伤。",
+                tip: "像一块'缓冲垫'，C形（近似O形），外侧与侧副韧带不直接相连。",
+                category: "cartilage"
+            },
+            6: {
+                name: "内侧半月板",
+                en: "Medial Meniscus",
+                icon: "🥏",
+                location: "位于股骨内侧髁与胫骨内侧平台之间的C形纤维软骨盘，较大且与内侧副韧带紧密相连。",
+                function: "承受内侧主要负荷（占60-70%），缓冲压力，稳定膝关节内侧间室。",
+                clinical: "内侧半月板损伤最常见（占80%），因其活动度小，易受旋转力和挤压损伤；老年人退变性撕裂多发。",
+                tip: "C形，开口朝向内侧；前角薄后角厚，像一把'减震座椅'。",
+                category: "cartilage"
+            },
+            7: {
+                name: "胫骨外侧平台",
+                en: "Lateral Tibial Plateau",
+                icon: "🦴",
+                location: "胫骨上端外侧的关节面，稍凹陷，与股骨外侧髁形成外侧胫股关节。",
+                function: "承受体重外侧负荷（约40%），与半月板共同分散压力，参与膝关节屈伸。",
+                clinical: "外侧平台骨折较内侧少见，但手术难度较大；易发生塌陷性骨折。",
+                tip: "'平台'即顶部的平面，像一个小托盘托住股骨髁。",
+                category: "bone"
+            },
+            8: {
+                name: "胫骨内侧平台",
+                en: "Medial Tibial Plateau",
+                icon: "🦴",
+                location: "胫骨上端内侧的关节面，较外侧平台宽大，是主要的承重区域。",
+                function: "承受体重主要负荷（约60%），比外侧平台更强壮，是内侧半月板的基座。",
+                clinical: "内侧平台骨折常见，因其为承重主区；骨关节炎时内侧间隙变窄常见。",
+                tip: "比外侧平台大，像一个大托盘，承受着更多的重量。",
+                category: "bone"
+            },
+            9: {
+                name: "腓骨头",
+                en: "Head of Fibula",
+                icon: "🦴",
+                location: "腓骨上端膨大部分，位于胫骨外侧髁后外侧，与胫骨形成胫腓近侧关节。",
+                function: "外侧副韧带附着点；提供膝外侧稳定性；保护腓总神经（绕行腓骨颈）。",
+                clinical: "腓骨颈骨折易损伤腓总神经，导致足下垂（无法背屈脚踝）；Maisonneuve骨折涉及此处。",
+                tip: "小腿外侧可触及的突出骨头，像一个小哨兵守护着膝盖外侧。",
+                category: "bone"
+            },
+            10: {
+                name: "髌韧带",
+                en: "Patellar Ligament",
+                icon: "🔗",
+                location: "股四头肌腱的延续，起自髌骨下缘，止于胫骨粗隆，位于膝关节正前方。",
+                function: "传递股四头肌力量至胫骨，完成伸膝动作；是膝关节最强大的韧带。",
+                clinical: "髌腱炎（跳跃膝）常见于运动员；髌韧带断裂导致无法伸直膝盖；Osgood-Schlatter病累及止点。",
+                tip: "膝盖正中间可摸到的坚硬'筋'，连接膝盖骨和小腿骨。",
+                category: "ligament"
+            },
+            11: {
+                name: "髌骨",
+                en: "Patella",
+                icon: "🦴",
+                location: "人体最大的籽骨，位于股四头肌腱内，膝关节前方皮下可触及。",
+                function: "保护膝关节前方；增加股四头肌力臂（杠杆作用），使伸膝效率提高约20%。",
+                clinical: "髌骨脱位、骨折常见；髌股关节综合征（跑步膝）是膝前痛的主要原因；髌骨软化症常见于年轻人。",
+                tip: "'膝盖骨'，圆圆的可以上下滑动，是股四头肌的'滑轮'。",
+                category: "bone"
+            }
+        };
+
+        let currentMode = 'study';
+        let score = 0;
+        let studied = new Set();
+        let quizOrder = [];
+        let currentQuizIndex = 0;
+        let correctStreak = 0;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            shuffleQuiz();
+            setupHoverEffects();
+        });
+
+        function setupHoverEffects() {
+            const hotspots = document.querySelectorAll('.hotspot');
+            const labels = document.querySelectorAll('.structure-label');
+            
+            hotspots.forEach(hotspot => {
+                const id = hotspot.getAttribute('data-id');
+                const label = document.querySelector(`.structure-label[data-label="${id}"]`);
+                
+                hotspot.addEventListener('mouseenter', () => {
+                    if (label) label.style.opacity = '1';
+                });
+                
+                hotspot.addEventListener('mouseleave', () => {
+                    if (label) label.style.opacity = '0';
+                });
+            });
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            
+            // Update buttons
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                if (btn.id !== 'btn-xray') btn.classList.remove('active');
+            });
+            document.getElementById(`btn-${mode}`).classList.add('active');
+            
+            // Update panels
+            if (mode === 'study') {
+                document.getElementById('study-panel').classList.remove('hidden');
+                document.getElementById('quiz-panel').classList.add('hidden');
+                clearQuizHighlights();
+            } else {
+                document.getElementById('study-panel').classList.add('hidden');
+                document.getElementById('quiz-panel').classList.remove('hidden');
+                resetQuiz();
+            }
+        }
+
+        function toggleXray() {
+            const img = document.getElementById('anatomy-img');
+            const btn = document.getElementById('btn-xray');
+            
+            if (img.classList.contains('x-ray-mode')) {
+                img.classList.remove('x-ray-mode');
+                img.style.filter = '';
+                btn.classList.remove('active');
+                btn.innerHTML = '<span class="mr-2">🔍</span>X光视图';
+            } else {
+                img.classList.add('x-ray-mode');
+                img.style.filter = 'contrast(1.4) brightness(1.1) grayscale(0.8) sepia(0.2) hue-rotate(180deg)';
+                btn.classList.add('active');
+                btn.innerHTML = '<span class="mr-2">🎨</span>彩色视图';
+            }
+        }
+
+        function handleClick(id) {
+            if (currentMode === 'study') {
+                showDetail(id);
+                highlightHotspot(id);
+            } else {
+                checkAnswer(id);
+            }
+        }
+
+        function showDetail(id) {
+            const data = anatomyData[id];
+            if (!data) return;
+
+            document.getElementById('default-info').classList.add('hidden');
+            const detailInfo = document.getElementById('detail-info');
+            detailInfo.classList.remove('hidden');
+            
+            // Animate entry
+            detailInfo.style.opacity = '0';
+            detailInfo.style.transform = 'translateY(10px)';
+            setTimeout(() => {
+                detailInfo.style.transition = 'all 0.3s ease';
+                detailInfo.style.opacity = '1';
+                detailInfo.style.transform = 'translateY(0)';
+            }, 10);
+
+            // Fill data
+            document.getElementById('detail-number').textContent = id;
+            document.getElementById('detail-name').textContent = data.name;
+            document.getElementById('detail-en').textContent = data.en;
+            document.getElementById('detail-icon').textContent = data.icon;
+            document.getElementById('detail-location').textContent = data.location;
+            document.getElementById('detail-function').textContent = data.function;
+            document.getElementById('detail-clinical').textContent = data.clinical;
+            document.getElementById('detail-tip').textContent = data.tip;
+
+            // Update progress
+            studied.add(id);
+            updateProgress();
+        }
+
+        function highlightHotspot(id) {
+            document.querySelectorAll('.hotspot').forEach(h => h.classList.remove('active'));
+            document.querySelector(`.hotspot[data-id="${id}"]`).classList.add('active');
+        }
+
+        function updateProgress() {
+            document.getElementById('progress').textContent = studied.size;
+            document.getElementById('score').textContent = score;
+            document.getElementById('legend-progress').style.width = (studied.size / 11 * 100) + '%';
+        }
+
+        // Quiz Functions
+        function shuffleQuiz() {
+            quizOrder = Object.keys(anatomyData).map(Number);
+            for (let i = quizOrder.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [quizOrder[i], quizOrder[j]] = [quizOrder[j], quizOrder[i]];
+            }
+        }
+
+        function resetQuiz() {
+            currentQuizIndex = 0;
+            correctStreak = 0;
+            shuffleQuiz();
+            clearQuizHighlights();
+            updateQuizDisplay();
+            showQuestion();
+        }
+
+        function clearQuizHighlights() {
+            document.querySelectorAll('.hotspot').forEach(h => {
+                h.classList.remove('quiz-highlight', 'correct', 'wrong');
+            });
+        }
+
+        function showQuestion() {
+            if (currentQuizIndex >= quizOrder.length) {
+                showQuizComplete();
+                return;
+            }
+
+            const targetId = quizOrder[currentQuizIndex];
+            const data = anatomyData[targetId];
+            
+            document.getElementById('quiz-target').textContent = data.name;
+            document.getElementById('quiz-target-en').textContent = data.en;
+            document.getElementById('quiz-feedback').classList.add('hidden');
+            document.getElementById('next-btn').classList.add('hidden');
+            
+            // Highlight target after short delay
+            setTimeout(() => {
+                document.querySelector(`.hotspot[data-id="${targetId}"]`).classList.add('quiz-highlight');
+            }, 500);
+            
+            updateQuizDisplay();
+        }
+
+        function checkAnswer(selectedId) {
+            const targetId = quizOrder[currentQuizIndex];
+            const feedback = document.getElementById('quiz-feedback');
+            const targetHotspot = document.querySelector(`.hotspot[data-id="${targetId}"]`);
+            const selectedHotspot = document.querySelector(`.hotspot[data-id="${selectedId}"]`);
+            
+            feedback.classList.remove('hidden');
+            
+            if (selectedId === targetId) {
+                // Correct
+                feedback.innerHTML = `<div class="text-2xl mb-1">✅</div>正确！+${10 + (correctStreak * 2)}分<div class="text-xs font-normal mt-1 text-green-200">连续答对 x${correctStreak + 1}</div>`;
+                feedback.className = 'mb-4 rounded-xl p-4 text-center font-bold border bg-green-900/50 text-green-300 border-green-600';
+                
+                targetHotspot.classList.remove('quiz-highlight');
+                targetHotspot.classList.add('correct');
+                
+                score += (10 + correctStreak * 2);
+                correctStreak++;
+                currentQuizIndex++;
+                
+                document.getElementById('next-btn').classList.remove('hidden');
+                updateProgress();
+            } else {
+                // Wrong
+                feedback.innerHTML = `<div class="text-2xl mb-1">❌</div>错误<div class="text-xs font-normal mt-1 text-red-200">正确答案是：${anatomyData[targetId].name}</div>`;
+                feedback.className = 'mb-4 rounded-xl p-4 text-center font-bold border bg-red-900/50 text-red-300 border-red-600';
+                
+                selectedHotspot.classList.add('wrong');
+                targetHotspot.classList.remove('quiz-highlight');
+                targetHotspot.classList.add('correct');
+                
+                correctStreak = 0;
+                currentQuizIndex++;
+                
+                setTimeout(() => {
+                    document.getElementById('next-btn').classList.remove('hidden');
+                }, 1000);
+                
+                updateQuizDisplay();
+                updateProgress();
+            }
+            
+            updateQuizDisplay();
+        }
+
+        function updateQuizDisplay() {
+            document.getElementById('quiz-current').textContent = Math.min(currentQuizIndex + 1, 11);
+            document.getElementById('quiz-progress').style.width = ((currentQuizIndex / 11) * 100) + '%';
+            document.getElementById('correct-count').textContent = Math.floor(score / 10);
+            document.getElementById('streak-count').textContent = correctStreak;
+        }
+
+        function nextQuestion() {
+            clearQuizHighlights();
+            if (currentQuizIndex >= quizOrder.length) {
+                resetQuiz();
+            } else {
+                showQuestion();
+            }
+        }
+
+        function showQuizComplete() {
+            const accuracy = Math.round((score / (11 * 10)) * 100);
+            let message = '';
+            let emoji = '';
+            
+            if (accuracy >= 90) { message = '完美！你是解剖学大师！'; emoji = '🏆'; }
+            else if (accuracy >= 70) { message = '优秀！继续加油！'; emoji = '🌟'; }
+            else if (accuracy >= 50) { message = '不错！还有进步空间'; emoji = '👍'; }
+            else { message = '继续学习，再接再厉！'; emoji = '📚'; }
+            
+            document.getElementById('quiz-panel').innerHTML = `
+                <div class="text-center py-8">
+                    <div class="text-6xl mb-4 animate-bounce">${emoji}</div>
+                    <h3 class="text-2xl font-bold text-white mb-2">${message}</h3>
+                    <div class="bg-slate-800/50 rounded-2xl p-6 mt-4 border border-slate-700">
+                        <p class="text-gray-400 mb-1">最终得分</p>
+                        <p class="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 mb-4">${score}</p>
+                        <div class="grid grid-cols-2 gap-4 text-sm">
+                            <div class="bg-slate-700/50 p-3 rounded-lg">
+                                <p class="text-gray-400">正确率</p>
+                                <p class="text-xl font-bold text-white">${accuracy}%</p>
+                            </div>
+                            <div class="bg-slate-700/50 p-3 rounded-lg">
+                                <p class="text-gray-400">连续最高</p>
+                                <p class="text-xl font-bold text-yellow-400">${Math.max(correctStreak, 1)}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <button onclick="location.reload()" class="mt-6 w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-bold hover:from-indigo-500 hover:to-purple-500 transition shadow-lg">
+                        重新开始 ↺
+                    </button>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

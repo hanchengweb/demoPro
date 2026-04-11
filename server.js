@@ -169,11 +169,11 @@ app.post('/api/chat', async (req, res) => {
       max_tokens,
     };
 
-    if (typeof temperature === 'number' && selected.provider !== 'moonshot') {
+    if (typeof temperature === 'number') {
       payload.temperature = temperature;
     }
 
-    if (typeof top_p === 'number' && selected.provider !== 'moonshot') {
+    if (typeof top_p === 'number') {
       payload.top_p = top_p;
     }
 

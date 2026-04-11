@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>肺水肿交互式动画 - Pulmonary Edema</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans SC', sans-serif;
+    background: linear-gradient(135deg, #0a0e27 0%, #1a1a3e 50%, #0d1b2a 100%);
+    color: #e0e0e0;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 30px 20px 10px;
+    position: relative;
+  }
+  .header h1 {
+    font-size: 2.4em;
+    font-weight: 700;
+    background: linear-gradient(90deg, #ff6b6b, #ffa07a, #87ceeb);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+  .header p {
+    font-size: 1.05em;
+    color: #8899aa;
+    font-weight: 300;
+  }
+
+  /* Main Layout */
+  .main-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 24px;
+  }
+
+  /* Scene Card */
+  .scene-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.4s ease;
+  }
+  .scene-card:hover {
+    border-color: rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.06);
+  }
+  .scene-card.normal { grid-column: 1; }
+  .scene-card.edema { grid-column: 2; }
+
+  .scene-card .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .scene-card .card-title {
+    font-size: 1.4em;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .normal .card-title { color: #4ecdc4; }
+  .edema .card-title { color: #ff6b6b; }
+
+  .status-badge {
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 0.8em;
+    font-weight: 500;
+  }
+  .normal .status-badge {
+    background: rgba(78,205,196,0.15);
+    color: #4ecdc4;
+    border: 1px solid rgba(78,205,196,0.3);
+  }
+  .edema .status-badge {
+    background: rgba(255,107,107,0.15);
+    color: #ff6b6b;
+    border: 1px solid rgba(255,107,107,0.3);
+  }
+
+  /* Canvas */
+  .canvas-wrap {
+    width: 100%;
+    aspect-ratio: 4/3;
+    border-radius: 14px;
+    overflow: hidden;
+    background: radial-gradient(ellipse at center, rgba(20,30,60,0.8), rgba(10,14,39,0.95));
+    position: relative;
+  }
+  .canvas-wrap canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* Info Panel */
+  .info-panel {
+    grid-column: 1 / -1;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px;
+    padding: 28px;
+  }
+  .info-panel h2 {
+    font-size: 1.3em;
+    color: #ffa07a;
+    margin-bottom: 16px;
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .control-group label {
+    font-size: 0.85em;
+    color: #8899aa;
+    font-weight: 500;
+  }
+  .control-group input[type="range"] {
+    -webkit-appearance: none;
+    width: 200px;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.1);
+    outline: none;
+  }
+  .control-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #ffa07a;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(255,160,122,0.5);
+  }
+
+  .btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.95em;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-family: 'Noto Sans SC', sans-serif;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+    color: white;
+  }
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255,107,107,0.4);
+  }
+  .btn-secondary {
+    background: rgba(255,255,255,0.08);
+    color: #e0e0e0;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+  .btn-secondary:hover {
+    background: rgba(255,255,255,0.12);
+  }
+  .btn.active {
+    background: linear-gradient(135deg, #4ecdc4, #44a08d);
+    color: white;
+  }
+
+  /* Data Cards */
+  .data-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+  }
+  .data-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    padding: 16px;
+    text-align: center;
+    transition: all 0.3s ease;
+  }
+  .data-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(255,255,255,0.2);
+  }
+  .data-card .value {
+    font-size: 1.8em;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .data-card .label {
+    font-size: 0.8em;
+    color: #8899aa;
+  }
+  .data-card.normal-card .value { color: #4ecdc4; }
+  .data-card.edema-card .value { color: #ff6b6b; }
+  .data-card.warning-card .value { color: #ffd93d; }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85em;
+    color: #aabbcc;
+  }
+  .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+  }
+
+  /* Tooltip */
+  .tooltip {
+    position: fixed;
+    background: rgba(20,20,50,0.95);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 0.85em;
+    color: #e0e0e0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 100;
+    max-width: 250px;
+    backdrop-filter: blur(10px);
+  }
+  .tooltip.visible { opacity: 1; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .main-container {
+      grid-template-columns: 1fr;
+    }
+    .scene-card.normal, .scene-card.edema {
+      grid-column: 1;
+    }
+    .header h1 { font-size: 1.8em; }
+  }
+
+  /* Pulse animation for heart */
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🫁 肺水肿交互式动画</h1>
+  <p>Pulmonary Edema — 正常气体交换 vs 肺泡积液病理过程</p>
+</div>
+
+<div class="main-container">
+  <!-- Normal Scene -->
+  <div class="scene-card normal">
+    <div class="card-header">
+      <div class="card-title">
+        <span>🫁</span> 正常肺泡
+      </div>
+      <span class="status-badge">● 正常运作</span>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="normalCanvas"></canvas>
+    </div>
+  </div>
+
+  <!-- Edema Scene -->
+  <div class="scene-card edema">
+    <div class="card-header">
+      <div class="card-title">
+        <span>💧</span> 肺水肿
+      </div>
+      <span class="status-badge">● 气体交换受损</span>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="edemaCanvas"></canvas>
+    </div>
+  </div>
+
+  <!-- Info Panel -->
+  <div class="info-panel">
+    <h2>⚙️ 交互控制</h2>
+    <div class="controls">
+      <div class="control-group">
+        <label>水肿严重程度: <span id="severityVal">50%</span></label>
+        <input type="range" id="severitySlider" min="0" max="100" value="50">
+      </div>
+      <div class="control-group">
+        <label>动画速度: <span id="speedVal">1.0x</span></label>
+        <input type="range" id="speedSlider" min="20" max="200" value="100">
+      </div>
+      <div class="control-group">
+        <label>呼吸频率: <span id="breathVal">15 次/分</span></label>
+        <input type="range" id="breathSlider" min="8" max="30" value="15">
+      </div>
+      <button class="btn btn-primary" id="toggleBtn" onclick="toggleAnimation()">⏸ 暂停</button>
+      <button class="btn btn-secondary" id="highlightBtn" onclick="toggleHighlight()">🔍 高亮气体交换</button>
+      <button class="btn btn-secondary" onclick="resetAll()">🔄 重置</button>
+    </div>
+
+    <div class="data-cards">
+      <div class="data-card normal-card">
+        <div class="value" id="o2Normal">98%</div>
+        <div class="label">正常血氧饱和度</div>
+      </div>
+      <div class="data-card edema-card">
+        <div class="value" id="o2Edema">88%</div>
+        <div class="label">水肿血氧饱和度</div>
+      </div>
+      <div class="data-card warning-card">
+        <div class="value" id="fluidLevel">50%</div>
+        <div class="label">肺泡积液程度</div>
+      </div>
+      <div class="data-card normal-card">
+        <div class="value" id="gasEfficiency">95%</div>
+        <div class="label">气体交换效率</div>
+      </div>
+      <div class="data-card edema-card">
+        <div class="value" id="co2Level">40</div>
+        <div class="label">CO₂ 分压 (mmHg)</div>
+      </div>
+      <div class="data-card warning-card">
+        <div class="value" id="breathRate">15</div>
+        <div class="label">呼吸频率 (次/分)</div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#4ecdc4"></div> O₂ 氧气</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ffa07a"></div> CO₂ 二氧化碳</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#6699ff"></div> 毛细血管</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ff6b6b"></div> 肺泡壁</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgba(100,180,255,0.6)"></div> 积液</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#cc66ff"></div> 红细胞</div>
+    </div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ==================== CONFIG ====================
+const config = {
+  severity: 0.5,
+  speed: 1.0,
+  breathRate: 15,
+  running: true,
+  highlight: false,
+  time: 0
+};
+
+// ==================== CANVAS SETUP ====================
+const normalCanvas = document.getElementById('normalCanvas');
+const edemaCanvas = document.getElementById('edemaCanvas');
+const nCtx = normalCanvas.getContext('2d');
+const eCtx = edemaCanvas.getContext('2d');
+
+function resizeCanvases() {
+  [normalCanvas, edemaCanvas].forEach(c => {
+    const rect = c.parentElement.getBoundingClientRect();
+    c.width = rect.width * 2;
+    c.height = rect.height * 2;
+    c.getContext('2d').scale(2, 2);
+  });
+}
+resizeCanvases();
+window.addEventListener('resize', resizeCanvases);
+
+// ==================== PARTICLES ====================
+class GasParticle {
+  constructor(type, canvasW, canvasH) {
+    this.type = type; // 'O2' or 'CO2'
+    this.reset(canvasW, canvasH);
+  }
+  reset(w, h) {
+    const cx = w / 2, cy = h / 2;
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 40 + Math.random() * 60;
+    if (this.type === 'O2') {
+      // Start from alveolar space, move toward capillary
+      this.x = cx + Math.cos(angle) * dist;
+      this.y = cy + Math.sin(angle) * dist;
+      this.targetX = cx + Math.cos(angle + Math.PI) * (dist + 30);
+      this.targetY = cy + Math.sin(angle + Math.PI) * (dist + 30);
+    } else {
+      // Start from capillary, move toward alveolar space
+      this.x = cx + Math.cos(angle) * (dist + 30);
+      this.y = cy + Math.sin(angle) * (dist + 30);
+      this.targetX = cx + Math.cos(angle + Math.PI) * dist;
+      this.targetY = cy + Math.sin(angle + Math.PI) * dist;
+    }
+    this.progress = 0;
+    this.speed = 0.003 + Math.random() * 0.004;
+    this.size = 3 + Math.random() * 2;
+    this.opacity = 0.7 + Math.random() * 0.3;
+    this.wobble = Math.random() * Math.PI * 2;
+  }
+  update(speed, blocked = false) {
+    if (blocked && Math.random() < 0.7) return;
+    this.progress += this.speed * speed;
+    this.wobble += 0.05;
+    if (this.progress >= 1) this.progress = 0;
+  }
+  draw(ctx, highlight) {
+    const t = this.progress;
+    const x = this.x + (this.targetX - this.x) * t + Math.sin(this.wobble) * 3;
+    const y = this.y + (this.targetY - this.y) * t + Math.cos(this.wobble) * 3;
+    
+    const color = this.type === 'O2' ? '#4ecdc4' : '#ffa07a';
+    const glowColor = this.type === 'O2' ? 'rgba(78,205,196,' : 'rgba(255,160,122,';
+    
+    if (highlight) {
+      ctx.beginPath();
+      ctx.arc(x, y, this.size * 3, 0, Math.PI * 2);
+      ctx.fillStyle = glowColor + '0.15)';
+      ctx.fill();
+    }
+    
+    ctx.beginPath();
+    ctx.arc(x, y, this.size, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.globalAlpha = this.opacity * (1 - Math.abs(t - 0.5) * 0.3);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    
+    // Label
+    if (highlight && this.size > 4) {
+      ctx.font = 'bold 8px Noto Sans SC';
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.fillText(this.type === 'O2' ? 'O₂' : 'CO₂', x, y - this.size - 4);
+    }
+  }
+}
+
+class RedBloodCell {
+  constructor(canvasW, canvasH) {
+    this.reset(canvasW, canvasH);
+  }
+  reset(w, h) {
+    const cx = w / 2, cy = h / 2;
+    this.angle = Math.random() * Math.PI * 2;
+    this.radius = 70 + Math.random() * 20;
+    this.x = cx + Math.cos(this.angle) * this.radius;
+    this.y = cy + Math.sin(this.angle) * this.radius;
+    this.speed = 0.005 + Math.random() * 0.008;
+    this.size = 5 + Math.random() * 3;
+    this.wobble = Math.random() * Math.PI * 2;
+  }
+  update(speed) {
+    this.angle += this.speed * speed;
+    this.wobble += 0.03;
+  }
+  draw(ctx, cx, cy, oxygenated) {
+    const r = this.radius + Math.sin(this.wobble) * 3;
+    const x = cx + Math.cos(this.angle) * r;
+    const y = cy + Math.sin(this.angle) * r;
+    
+    // Red blood cell shape (biconcave disc)
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(this.angle);
+    
+    const color = oxygenated ? '#ff4444' : '#8844aa';
+    const glowColor = oxygenated ? 'rgba(255,68,68,0.3)' : 'rgba(136,68,170,0.3)';
+    
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.size, this.size * 0.6, 0, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = glowColor;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    
+    // Inner dimple
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.size * 0.4, this.size * 0.25, 0, 0, Math.PI * 2);
+    ctx.fillStyle = oxygenated ? '#cc2222' : '#663388';
+    ctx.fill();
+    
+    ctx.restore();
+  }
+}
+
+class FluidDrop {
+  constructor(canvasW, canvasH) {
+    this.reset(canvasW, canvasH);
+  }
+  reset(w, h) {
+    const cx = w / 2, cy = h / 2;
+    this.x = cx + (Math.random() - 0.5) * 100;
+    this.y = cy + 20 + Math.random() * 40;
+    this.targetY = cy + 10 + Math.random() * 30;
+    this.size = 2 + Math.random() * 4;
+    this.opacity = 0.2 + Math.random() * 0.4;
+    this.speed = 0.2 + Math.random() * 0.5;
+    this.phase = Math.random() * Math.PI * 2;
+  }
+  update(speed, severity) {
+    this.phase += 0.02 * speed;
+    this.y += Math.sin(this.phase) * 0.3;
+  }
+  draw(ctx, severity) {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(100,180,255,${this.opacity * severity})`;
+    ctx.fill();
+  }
+}
+
+// Create particles
+let normalParticles = [];
+let edemaParticles = [];
+let normalRBCs = [];
+let edemaRBCs = [];
+let fluidDrops = [];
+
+function initParticles() {
+  const w = normalCanvas.width / 2;
+  const h = normalCanvas.height / 2;
+  
+  normalParticles = [];
+  edemaParticles = [];
+  normalRBCs = [];
+  edemaRBCs = [];
+  fluidDrops = [];
+  
+  for (let i = 0; i < 25; i++) {
+    normalParticles.push(new GasParticle('O2', w, h));
+    normalParticles.push(new GasParticle('CO2', w, h));
+    edemaParticles.push(new GasParticle('O2', w, h));
+    edemaParticles.push(new GasParticle('CO2', w, h));
+  }
+  for (let i = 0; i < 12; i++) {
+    normalRBCs.push(new RedBloodCell(w, h));
+    edemaRBCs.push(new RedBloodCell(w, h));
+  }
+  for (let i = 0; i < 40; i++) {
+    fluidDrops.push(new FluidDrop(w, h));
+  }
+}
+initParticles();
+
+// ==================== DRAWING ====================
+function drawAlveolarUnit(ctx, w, h, isEdema, time) {
+  const cx = w / 2;
+  const cy = h / 2;
+  const breathPhase = Math.sin(time * config.breathRate * 0.1) * 0.5 + 0.5;
+  const breathScale = 1 + breathPhase * 0.06;
+  const severity = config.severity;
+  
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(breathScale, breathScale);
+  ctx.translate(-cx, -cy);
+  
+  // === Capillary (outer ring) ===
+  const capRadius = 90;
+  const capWidth = 28;
+  
+  // Capillary glow
+  const capGrad = ctx.createRadialGradient(cx, cy, capRadius - capWidth, cx, cy, capRadius + capWidth);
+  capGrad.addColorStop(0, 'rgba(50,80,180,0.05)');
+  capGrad.addColorStop(0.3, 'rgba(50,80,180,0.15)');
+  capGrad.addColorStop(0.7, 'rgba(80,120,220,0.2)');
+  capGrad.addColorStop(1, 'rgba(50,80,180,0.05)');
+  
+  ctx.beginPath();
+  ctx.arc(cx, cy, capRadius + capWidth/2, 0, Math.PI * 2);
+  ctx.arc(cx, cy, capRadius - capWidth/2, 0, Math.PI * 2, true);
+  ctx.fillStyle = capGrad;
+  ctx.fill();
+  
+  // Capillary border
+  ctx.beginPath();
+  ctx.arc(cx, cy, capRadius + capWidth/2, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(100,140,255,0.3)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  
+  ctx.beginPath();
+  ctx.arc(cx, cy, capRadius - capWidth/2, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(100,140,255,0.3)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  
+  // === Alveolar wall ===
+  const alvRadius = capRadius - capWidth/2 - 8;
+  
+  // Alveolar wall
+  ctx.beginPath();
+  ctx.arc(cx, cy, alvRadius, 0, Math.PI * 2);
+  const wallColor = isEdema ? 
+    `rgba(255,${Math.floor(107 - severity * 30)},${Math.floor(107 - severity * 30)},0.4)` :
+    'rgba(255,107,107,0.25)';
+  ctx.strokeStyle = wallColor;
+  ctx.lineWidth = isEdema ? 3 + severity * 2 : 3;
+  ctx.stroke();
+  
+  // Alveolar wall glow
+  if (isEdema) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, alvRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,80,80,${0.1 + severity * 0.2})`;
+    ctx.lineWidth = 8;
+    ctx.stroke();
+  }
+  
+  // === Fluid in alveoli (edema only) ===
+  if (isEdema && severity > 0.05) {
+    const fluidLevel = severity * 0.85;
+    const fluidY = cy + alvRadius * (1 - fluidLevel * 2);
+    
+    // Fluid body
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, alvRadius - 2, 0, Math.PI * 2);
+    ctx.clip();
+    
+    // Wavy fluid surface
+    const fluidGrad = ctx.createLinearGradient(cx, fluidY - 10, cx, cy + alvRadius);
+    fluidGrad.addColorStop(0, `rgba(80,160,255,${0.15 + severity * 0.25})`);
+    fluidGrad.addColorStop(0.5, `rgba(60,140,240,${0.2 + severity * 0.3})`);
+    fluidGrad.addColorStop(1, `rgba(40,120,220,${0.3 + severity * 0.35})`);
+    
+    ctx.beginPath();
+    ctx.moveTo(cx - alvRadius, cy + alvRadius);
+    for (let x = cx - alvRadius; x <= cx + alvRadius; x += 2) {
+      const wave = Math.sin((x - cx) * 0.05 + time * 2) * 4 * severity +
+                   Math.sin((x - cx) * 0.08 + time * 3) * 2 * severity;
+      ctx.lineTo(x, fluidY + wave);
+    }
+    ctx.lineTo(cx + alvRadius, cy + alvRadius);
+    ctx.closePath();
+    ctx.fillStyle = fluidGrad;
+    ctx.fill();
+    
+    // Fluid surface highlight
+    ctx.beginPath();
+    for (let x = cx - alvRadius + 10; x <= cx + alvRadius - 10; x += 2) {
+      const wave = Math.sin((x - cx) * 0.05 + time * 2) * 4 * severity +
+                   Math.sin((x - cx) * 0.08 + time * 3) * 2 * severity;
+      if (x === cx - alvRadius + 10) ctx.moveTo(x, fluidY + wave);
+      else ctx.lineTo(x, fluidY + wave);
+    }
+    ctx.strokeStyle = `rgba(150,210,255,${0.3 + severity * 0.3})`;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    
+    // Bubbles in fluid
+    for (let i = 0; i < 6 * severity; i++) {
+      const bx = cx + Math.sin(time * 0.5 + i * 1.7) * (alvRadius * 0.6 * severity);
+      const by = fluidY + 10 + Math.sin(time * 0.3 + i * 2.3) * 15 * severity + i * 8;
+      const br = 2 + Math.sin(time + i) * 1;
+      ctx.beginPath();
+      ctx.arc(bx, by, br, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(180,220,255,${0.15 + Math.sin(time + i) * 0.1})`;
+      ctx.fill();
+      ctx.strokeStyle = `rgba(200,230,255,${0.2})`;
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+    
+    ctx.restore();
+  }
+  
+  // === Labels ===
+  ctx.font = 'bold 11px Noto Sans SC';
+  ctx.textAlign = 'center';
+  
+  // Capillary label
+  ctx.fillStyle = 'rgba(100,140,255,0.8)';
+  ctx.fillText('毛细血管', cx, cy - capRadius - capWidth/2 - 8);
+  
+  // Alveolar label
+  ctx.fillStyle = isEdema ? 'rgba(255,107,107,0.8)' : 'rgba(255,150,150,0.7)';
+  ctx.fillText('肺泡', cx, cy + 4);
+  
+  // O2 / CO2 labels with arrows
+  if (!isEdema || severity < 0.7) {
+    const arrowOpacity = isEdema ? Math.max(0.2, 1 - severity * 1.2) : 0.8;
+    
+    // O2 arrow (alveoli → capillary)
+    ctx.save();
+    ctx.globalAlpha = arrowOpacity;
+    const o2Angle = -Math.PI / 4;
+    const o2x1 = cx + Math.cos(o2Angle) * (alvRadius - 15);
+    const o2y1 = cy + Math.sin(o2Angle) * (alvRadius - 15);
+    const o2x2 = cx + Math.cos(o2Angle) * (capRadius + 5);
+    const o2y2 = cy + Math.sin(o2Angle) * (capRadius + 5);
+    
+    drawArrow(ctx, o2x1, o2y1, o2x2, o2y2, '#4ecdc4', arrowOpacity);
+    ctx.font = 'bold 10px Noto Sans SC';
+    ctx.fillStyle = '#4ecdc4';
+    ctx.fillText('O₂', (o2x1 + o2x2) / 2 - 12, (o2y1 + o2y2) / 2 - 6);
+    
+    // CO2 arrow (capillary → alveoli)
+    const co2Angle = Math.PI / 4;
+    const co2x1 = cx + Math.cos(co2Angle) * (capRadius + 5);
+    const co2y1 = cy + Math.sin(co2Angle) * (capRadius + 5);
+    const co2x2 = cx + Math.cos(co2Angle) * (alvRadius - 15);
+    const co2y2 = cy + Math.sin(co2Angle) * (alvRadius - 15);
+    
+    drawArrow(ctx, co2x1, co2y1, co2x2, co2y2, '#ffa07a', arrowOpacity);
+    ctx.fillStyle = '#ffa07a';
+    ctx.fillText('CO₂', (co2x1 + co2x2) / 2 + 14, (co2y1 + co2y2) / 2 - 6);
+    
+    ctx.restore();
+  }
+  
+  // Edema warning
+  if (isEdema && severity > 0.3) {
+    ctx.font = 'bold 10px Noto Sans SC';
+    ctx.fillStyle = `rgba(255,200,50,${0.5 + Math.sin(time * 3) * 0.3})`;
+    ctx.fillText('⚠ 气体交换受阻', cx, cy + alvRadius + 20);
+  }
+  
+  ctx.restore();
+}
+
+function drawArrow(ctx, x1, y1, x2, y2, color, opacity) {
+  const headLen = 8;
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 3]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  
+  // Arrowhead
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - headLen * Math.cos(angle - 0.4), y2 - headLen * Math.sin(angle - 0.4));
+  ctx.lineTo(x2 - headLen * Math.cos(angle + 0.4), y2 - headLen * Math.sin(angle + 0.4));
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.restore();
+}
+
+// ==================== ANIMATION LOOP ====================
+function animate() {
+  if (!config.running) {
+    requestAnimationFrame(animate);
+    return;
+  }
+  
+  config.time += 0.016 * config.speed;
+  
+  const nw = normalCanvas.width / 2;
+  const nh = normalCanvas.height / 2;
+  const ew = edemaCanvas.width / 2;
+  const eh = edemaCanvas.height / 2;
+  
+  // Clear
+  nCtx.clearRect(0, 0, nw, nh);
+  eCtx.clearRect(0, 0, ew, eh);
+  
+  // Draw alveolar units
+  drawAlveolarUnit(nCtx, nw, nh, false, config.time);
+  drawAlveolarUnit(eCtx, ew, eh, true, config.time);
+  
+  // Update and draw particles
+  normalParticles.forEach(p => {
+    p.update(config.speed, false);
+    p.draw(nCtx, config.highlight);
+  });
+  
+  edemaParticles.forEach(p => {
+    p.update(config.speed, config.severity > 0.3);
+    p.draw(eCtx, config.highlight);
+  });
+  
+  // Red blood cells
+  normalRBCs.forEach(rbc => {
+    rbc.update(config.speed);
+    rbc.draw(nCtx, nw/2, nh/2, true);
+  });
+  
+  edemaRBCs.forEach(rbc => {
+    rbc.update(config.speed * (1 - config.severity * 0.5));
+    rbc.draw(eCtx, ew/2, eh/2, config.severity < 0.5);
+  });
+  
+  // Fluid drops (edema only)
+  if (config.severity > 0.1) {
+    fluidDrops.forEach(d => {
+      d.update(config.speed, config.severity);
+      d.draw(eCtx, config.severity);
+    });
+  }
+  
+  // Update data cards
+  updateDataCards();
+  
+  requestAnimationFrame(animate);
+}
+
+function updateDataCards() {
+  const s = config.severity;
+  const o2Ed = Math.max(70, 98 - s * 28);
+  const efficiency = Math.max(20, 95 - s * 70);
+  const co2 = Math.min(65, 40 + s * 25);
+  
+  document.getElementById('o2Normal').textContent = '98%';
+  document.getElementById('o2Edema').textContent = Math.round(o2Ed) + '%';
+  document.getElementById('fluidLevel').textContent = Math.round(s * 100) + '%';
+  document.getElementById('gasEfficiency').textContent = Math.round(efficiency) + '%';
+  document.getElementById('co2Level').textContent = Math.round(co2);
+  document.getElementById('breathRate').textContent = config.breathRate;
+  
+  // Color coding for edema O2
+  const o2El = document.getElementById('o2Edema');
+  if (o2Ed < 85) o2El.style.color = '#ff4444';
+  else if (o2Ed < 92) o2El.style.color = '#ffd93d';
+  else o2El.style.color = '#ff6b6b';
+}
+
+// ==================== CONTROLS ====================
+document.getElementById('severitySlider').addEventListener('input', function() {
+  config.severity = this.value / 100;
+  document.getElementById('severityVal').textContent = this.value + '%';
+});
+
+document.getElementById('speedSlider').addEventListener('input', function() {
+  config.speed = this.value / 100;
+  document.getElementById('speedVal').textContent = config.speed.toFixed(1) + 'x';
+});
+
+document.getElementById('breathSlider').addEventListener('input', function() {
+  config.breathRate = parseInt(this.value);
+  document.getElementById('breathVal').textContent = this.value + ' 次/分';
+});
+
+function toggleAnimation() {
+  config.running = !config.running;
+  const btn = document.getElementById('toggleBtn');
+  btn.textContent = config.running ? '⏸ 暂停' : '▶ 播放';
+}
+
+function toggleHighlight() {
+  config.highlight = !config.highlight;
+  const btn = document.getElementById('highlightBtn');
+  btn.classList.toggle('active');
+}
+
+function resetAll() {
+  config.severity = 0.5;
+  config.speed = 1.0;
+  config.breathRate = 15;
+  config.running = true;
+  config.highlight = false;
+  
+  document.getElementById('severitySlider').value = 50;
+  document.getElementById('speedSlider').value = 100;
+  document.getElementById('breathSlider').value = 15;
+  document.getElementById('severityVal').textContent = '50%';
+  document.getElementById('speedVal').textContent = '1.0x';
+  document.getElementById('breathVal').textContent = '15 次/分';
+  document.getElementById('toggleBtn').textContent = '⏸ 暂停';
+  document.getElementById('highlightBtn').classList.remove('active');
+  
+  initParticles();
+}
+
+// ==================== TOOLTIP ====================
+const tooltip = document.getElementById('tooltip');
+document.querySelectorAll('.canvas-wrap').forEach(wrap => {
+  wrap.addEventListener('mousemove', (e) => {
+    const rect = wrap.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const isEdema = wrap.parentElement.classList.contains('edema');
+    
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+    
+    let text = '';
+    if (dist < 55) {
+      text = isEdema ? '💧 肺泡内积液区域 — 液体阻碍了气体交换' : '🫁 肺泡 — 正常的空气腔，进行气体交换';
+    } else if (dist < 105) {
+      text = '🔴 毛细血管 — 血液在此进行气体交换';
+    } else {
+      text = '🫁 肺组织';
+    }
+    
+    tooltip.textContent = text;
+    tooltip.style.left = (e.clientX + 15) + 'px';
+    tooltip.style.top = (e.clientY + 15) + 'px';
+    tooltip.classList.add('visible');
+  });
+  
+  wrap.addEventListener('mouseleave', () => {
+    tooltip.classList.remove('visible');
+  });
+});
+
+// ==================== START ====================
+animate();
+</script>
+</body>
+</html>

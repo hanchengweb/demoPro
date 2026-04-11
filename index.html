@@ -589,11 +589,11 @@ const MODEL_PREFERENCE = {
 const STAGE_CONFIG = {
   optimize: { max_tokens: 1600, timeout: 45000, thinking: { type: 'disabled' } },
   spec: { max_tokens: 2800, timeout: 50000, thinking: { type: 'disabled' } },
-  fastGenerate: { max_tokens: 8200, timeout: 150000, thinking: { type: 'disabled' } },
-  generate: { max_tokens: 9800, timeout: 180000, thinking: { type: 'disabled' } },
-  directGenerate: { max_tokens: 12000, timeout: 240000, thinking: { type: 'disabled' } },
+  fastGenerate: { max_tokens: 8200, timeout: 150000, thinking: { type: 'enabled', budget_tokens: 1024 } },
+  generate: { max_tokens: 9800, timeout: 180000, thinking: { type: 'enabled', budget_tokens: 2048 } },
+  directGenerate: { max_tokens: 12000, timeout: 0, thinking: { type: 'enabled', budget_tokens: 2048 } },
   review: { max_tokens: 1800, timeout: 25000, thinking: { type: 'disabled' } },
-  repair: { max_tokens: 12000, timeout: 150000, thinking: { type: 'disabled' } }
+  repair: { max_tokens: 12000, timeout: 150000, thinking: { type: 'enabled', budget_tokens: 1024 } }
 };
 
 const GENERATION_POLICY = {
@@ -602,95 +602,68 @@ const GENERATION_POLICY = {
   allowRepairOnlyWhenBroken: true
 };
 
-const PROMPT_OPTIMIZER_SYSTEM = `你是高端虚拟仿真案例策划专家。
+const PROMPT_OPTIMIZER_SYSTEM = `你是顶级虚拟仿真教学案例策划专家。参考 LoRA 级顶尖作品，你的任务是将需求改写为一份极具震撼力的专业提示词。
 
-你的任务是把用户一句话需求，改写成更容易生成高质量成品案例的中文提示词。
+重构指令核心：
+1. 视觉质感：强制要求深色科技感背景（#0a0e27 到 #1a1f4b 的渐变），玻璃拟态材质，所有对象必须带发光（Glow）动效。
+2. 教学布局：优先采用“双屏对比”或“三栏式”布局。主画面必须有极致的细节（如：流动的粒子、博动的器官、实时变化的液面）。
+3. 悬浮知识体系：必须规划“Hover 触发知识卡片”系统。当鼠标悬浮在核心结构上时，弹出设计精美的动态浮窗，展示专业术语和解析。
+4. 挑战闭环：必须设计不少于 3 个交互挑战题目（Quiz/Task），且挑战过程要带进度条和勋章反馈。
+5. 动画灵魂：粒子系统（O2/CO2）、受力反馈、动态曲线必须基于真实的物理模型。
 
-输出要求：
-1. 只输出优化后的提示词正文，不要解释，不要加标题。
-2. 保持用户原意，不擅自更换学科方向。
-3. 自动补足这几类信息：核心目标、核心现象、关键参数、交互方式、动画重点、数据反馈、视觉风格。
-4. 提示词必须强调成品感、精致度、动画表现力和交互反馈，不要写成长篇说明书。
-5. 页面中的文字要克制，优先用图形、动画、状态和数据表达，但允许保留必要的教学文字、互动规则、步骤提示和悬浮信息卡，文字必须短、准、服务教学。
-6. 要主动判断案例更适合哪种表现方式：原生 Canvas、PixiJS、SVG、Chart.js，只有在步骤任务型训练场景下才允许轻量使用 Phaser。
-7. 不允许出现原型化话术、演示稿口吻、教程浮层、体验引导废话，但允许真实教学场景需要的简洁说明文字。
-8. 优先鼓励轻量教学互动小游戏，例如识别、匹配、校准、排序、判断、拖拽。
-9. 语气简洁专业，控制在 180-260 字。`;
+输出要求：只输出优化后的提示词正文，字数 300-450 字，语气专业，像是在定义一份高价值的商业合同。`;
 
 const SPEC_SYSTEM_PROMPT = `你是虚拟仿真实验产品架构师。
 
-请把用户需求拆成一个严格可执行的实验规格 JSON，用于后续生成高质量单文件 HTML。
+请把用户需求拆解成一个严密、可执行的实验规格 JSON。
 
-只输出合法 JSON，不要 markdown，不要解释。
+只输出合法 JSON，不要解释。
 
 JSON 结构：
 {
   "title": "实验标题",
-  "summary": "一句话说明",
   "subject": "学科",
-  "scene": "核心实验场景",
-  "teachingGoals": ["目标1", "目标2"],
-  "corePhenomena": ["现象1", "现象2"],
-  "controls": [
-    { "name": "参数名", "type": "slider|number|select|toggle|button", "purpose": "作用", "range": "范围或选项" }
-  ],
-  "visualModules": ["仿真主画面", "实时数据卡片", "趋势图或状态区"],
-  "interactions": ["播放/暂停/重置", "参数变化后即时反馈", "关键状态切换"],
-  "dataFeedback": ["关键数值", "趋势曲线", "状态提示"],
-  "styleStrategy": {
-    "visualStyle": "对应案例的视觉风格",
-    "paletteMood": "配色气质",
-    "textDensity": "minimal|compact",
-    "motionDensity": "high|medium",
-    "referenceKeywords": ["3-5个风格关键词"]
-  },
-  "renderStrategy": {
-    "primaryRenderer": "canvas|pixi|svg|hybrid|phaser",
-    "fallbackRenderer": "canvas|svg",
-    "animationStyle": "mechanism|particle|flow|trajectory|process|task",
-    "gameFeel": "none|light",
-    "recommendedLibraries": ["PixiJS", "Chart.js"],
-    "reason": "为什么这样选"
-  },
+  "layout": "dual-view|dashboard|three-column",
   "simulationModel": {
-    "stateVariables": ["状态量1", "状态量2"],
-    "derivedMetrics": ["派生指标1", "派生指标2"],
-    "updateRules": ["参数变化如何驱动状态、动画和数据变化"]
+    "mathFormulas": ["公式1", "公式2"],
+    "classStructures": ["粒子/对象类定义"],
+    "stateVariables": ["关键状态量"]
   },
-  "qualityBar": [
-    "界面必须完整可运行",
-    "动画必须与实验过程相关且足够明显",
-    "参数调节后画面和数据同步变化",
-    "页面文案必须克制，避免冗长文字提示",
-    "代码必须为单文件 HTML",
-    "不要出现原型式提示语、引导浮层或占位说明"
+  "knowledgeCards": [
+    { "target": "点击/悬浮对象名", "title": "名词", "content": "专业解析", "icon": "SVG路径或Emoji" }
+  ],
+  "visuals": {
+    "theme": "dark-neon|glassmorphism",
+    "glowEffects": ["哪些部位需要发光"],
+    "palette": ["#Hex1", "#Hex2"]
+  },
+  "challenges": [
+    { "type": "quiz|task", "question": "问题1", "options": ["A", "B", "C"], "answer": "A" },
+    { "type": "quiz|task", "question": "问题2", "options": ["A", "B", "C"], "answer": "B" },
+    { "type": "quiz|task", "question": "问题3", "options": ["A", "B", "C"], "answer": "C" }
   ]
 }`;
 
-const HTML_SYSTEM_PROMPT = `你是顶级虚拟仿真实验前端工程师。你要根据给定实验规格，生成成品级单文件 HTML。
+const HTML_SYSTEM_PROMPT = `你是顶级虚拟仿真实验前端架构师。参考 LoRA 顶尖案例（深色科技感仪表盘风格），生成极致质感的单文件 HTML。
 
-硬性要求：
-1. 只输出完整 HTML，以 <!DOCTYPE html> 开头。
-2. 所有 HTML、CSS、JavaScript 内联在一个文件中。
-3. 页面必须可以直接在浏览器本地打开运行。
-4. 只允许使用 premium Kimi 路线擅长的高质量前端实现，优先做精致、精细、强动画的成品页面。
-5. 必须严格遵守 styleStrategy 和 renderStrategy，不同案例必须生成不同视觉风格，不能一套皮肤跑所有学科。
-6. 适合连续动画、粒子、流体、轨迹、机制演化的场景，优先用 Canvas 或 PixiJS；适合结构示意和几何表达的场景再用 SVG；只有步骤任务型训练才允许轻量 Phaser。
-7. 如果使用 PixiJS 或 Phaser，只能作为渲染与交互引擎，教学逻辑、参数逻辑、数据逻辑必须独立、清晰、可信。
-8. 动画必须足量、连续、顺滑、与案例机制强相关，不能只有轻飘飘的过渡效果。
-9. 页面文字必须少而准，禁止大段说明、长提示区、啰嗦教学文案；更多用图像、动画、数据和短标签表达。
-10. 控件文案、数据文案、图示文案全部用中文，但每块文字尽量短，优先单行或双行。
-11. 页面必须精致，有明确层次、细节、阴影、材质、节奏感，不能做成粗糙面板拼接。
-12. 代码要有必要注释，变量命名清晰，不能写成原型页、示意稿或半成品 demo。
-13. 最终代码长度要足够充实，不能只有空壳界面。
-14. 不要输出解释，不要使用 markdown 代码块。
-
-质量重点：
-- 参数变化必须驱动画面、状态、数据同步变化
-- 画面风格必须跟案例主题匹配
-- 优先生成可运行的高质量仿真动画，而不是说明性页面
-- 不允许出现“点击这里体验”“拖动查看原型”“交互提示”“教学说明”等原型化或啰嗦提示语
-- 如果带轻任务反馈，只能服务教学目标，不允许娱乐化跑偏`;
+核心实现准则：
+1. 视觉盛宴：
+   - 配色：使用深蓝到深紫的渐变背景（#0a0e27 -> #1a1f4b），文字用高亮青色或荧光色。
+   - 布局：必须实现“主副对比窗”或“多维数据面板”。面板使用 backdrop-blur (12px) 玻璃材质。
+   - 发光：Canvas 绘图必须带 ShadowBlur 扩散效果，模拟霓虹灯光感。
+2. 悬浮微课系统：
+   - 必须实现一套自定义 Tooltip 系统。
+   - 鼠标悬浮在核心对象（如：肺泡、血红蛋白、阀门）时，弹出包含标题、图标和专业解析的精致悬浮窗。
+3. 交互式挑战：
+   - 必须在侧边栏或独立浮层内置不少于 3 个挑战题目。
+   - 题目类型包含：选择判断、数值校准、拖拽排序。
+   - 正确时触发全屏粒子礼花，错误时触发屏幕震动红色滤镜。
+4. 细节动画：
+   - 使用粒子系统展示分子级交换（O2/CO2 交换动画）。
+   - 滑块调节时，画面参数必须实时同步平滑过渡。
+5. 架构规范：
+   - 使用 ES6 Class 封装核心逻辑。
+   - 只输出 <!DOCTYPE html> 开头的完整代码，严禁输出任何解释文字。`;
 
 const COMPACT_HTML_SYSTEM_PROMPT = `You are a senior front-end engineer for interactive education cases.
 
@@ -707,6 +680,7 @@ Hard rules:
 8. Prefer compact, production-ready code. Avoid repeated CSS, repeated components, and unnecessary wrappers.
 9. Prefer native Canvas/SVG with vanilla JavaScript. Only use PixiJS or Chart.js when they clearly improve the final result.
 10. Keep the result efficient: polished, animated, interactive, but not bloated.
+11. Syntax Check: Ensure all JavaScript template strings and braces are perfectly balanced.
 
 Quality target:
 - smooth continuous animation
@@ -715,31 +689,25 @@ Quality target:
 - theme aligned to the case
 - immediately deliverable final HTML`;
 
-const DIRECT_KIMI_CASE_SYSTEM_PROMPT = `你是顶级虚拟仿真教育案例前端工程师。
+const DIRECT_KIMI_CASE_SYSTEM_PROMPT = `你是顶级虚拟仿真教育案例架构师。你的目标是生成具备“严谨科学建模”与“极致视觉动效”的单文件 HTML。
 
-你的任务是直接根据用户输入的中文需求，生成最终可交付的单文件 HTML。
+必须遵守的“LoRA 级”执行准则：
+1. 视觉灵魂（对比布局与深色霓虹）：
+   - 必须采用深色科技感主题（背景：#0a0e27，组件：rgba(255,255,255,0.05)）。
+   - 布局：必须实现“对比视窗”（Normal vs Pathological）布局。
+   - 材质：面板强制使用 backdrop-blur (12px)，关键元素（如粒子、轮廓）必须带 ShadowBlur 霓虹光效。
+2. 动画内核（ES6 Class 驱动）：
+   - 严禁简单位移。必须使用 ES6 Class 封装核心对象（如 Particle, RBC, Wave）。
+   - 物理逻辑：动画必须基于 requestAnimationFrame，并包含物理/化学公式（如正弦波动态、重力、浓度梯度、随机漂移）。
+   - 呼吸感：主仿真对象必须带平滑的缩放或搏动动效。
+3. 交互系统（悬浮微课与 3+ 练习）：
+   - 智能悬浮：必须实现基于鼠标距离计算的 Canvas 悬浮提示系统（Tooltip）。
+   - 挑战闭环：页面内置不少于 3 个交互挑战题目（Quiz/Task）。
+   - 反馈体系：正确时触发粒子礼花，错误时触发屏幕震动和红色滤镜。
+4. 数据联动：
+   - 底部配备 4-6 个实时变化的数字仪表盘，数值需根据滑块状态通过科学公式计算得出。
 
-必须遵守：
-1. 只输出完整 HTML，以 <!DOCTYPE html> 开头，不要 markdown，不要解释。
-2. 所有 CSS 和 JavaScript 都内联在同一个 HTML 文件里。
-3. 页面必须直接可运行，包含真实动画、真实交互、真实状态反馈。
-4. 视觉必须精致、精细、有成品感，不要做成原型页、说明页、演示稿。
-5. 文案克制，避免大段废话和原型式提示语，但允许必要的教学文字、互动规则、步骤提示和 hover 知识点提示卡。
-6. 优先使用原生 Canvas、SVG、原生 JavaScript；只有明显必要时再引入轻量库。
-7. 控件变化必须立刻驱动画面、数据、状态同步变化。
-8. 根据案例主题自动匹配风格，不同案例不要一套皮肤。
-9. 如果用户需求适合游戏式动画，可以借鉴 2D 游戏的表现力，但不能偏离教学主题，不能娱乐化失焦。
-10. 对核心模型、器官、结构或机制节点，优先提供鼠标悬浮后的短提示卡，提示必须短、准、专业。
-11. 如果案例适合，应优先考虑加入轻量教学互动小游戏，例如识别、校准、排序、拖拽匹配、流程判断、Answer Game 式头脑风暴互动，但只能服务教学目标。
-12. 资源策略必须稳健：
-- 默认优先原生 Canvas、SVG、CSS、原生 JavaScript。
-- 允许使用稳定 CDN 的 PixiJS 或 Chart.js，但只有明显提升效果时才引入。
-- 图标优先内联 SVG 风格，参考 Lucide、Tabler、Heroicons 这类克制现代风格。
-- 不要依赖随机第三方图片热链、临时纹理站点、易失效素材地址。
-- 如需游戏感素材，优先借鉴 Kenney 的风格特征，但不要默认外链其资源文件。
-- 如需仿 3D 效果，优先用 2D 光影、分层、渐变、透视和动态来模拟，而不是强依赖重型 3D 资源。
-13. 审美方向必须高级、克制、专业，并带一点游戏工程师式的趣味和反馈感。
-14. 输出要偏成品，不要加入你自己的分析过程。`;
+输出要求：只输出完整 HTML 代码，严禁解释，严禁 Markdown 标记。确保语法完美，模板字符串必须正确闭合。`;
 
 const REVIEW_SYSTEM_PROMPT = `你是虚拟仿真实验质量审查员。
 
@@ -959,7 +927,7 @@ function inferRenderStrategy(prompt = '', category = '') {
       animationStyle: 'light-game',
       gameFeel: 'light',
       recommendedLibraries: ['Phaser', 'Chart.js'],
-      reason: '该案例强调步骤反馈与任务化交互，适合轻游戏化，但仍应以教学流程为主。'
+      reason: '该案例强调步骤反馈与任务化交互，适合轻游戏化，包含关卡挑战。'
     };
   }
 
@@ -970,7 +938,7 @@ function inferRenderStrategy(prompt = '', category = '') {
       animationStyle: 'mechanism',
       gameFeel: 'none',
       recommendedLibraries: ['PixiJS', 'Chart.js'],
-      reason: '该案例更适合连续动画、粒子、流动或机制演化，优先使用 Canvas，复杂场景可升级为 PixiJS。'
+      reason: '该案例涉及物理/生物动态机制，使用 Canvas 实现 60fps 平滑仿真与实时挑战。'
     };
   }
 
@@ -981,7 +949,7 @@ function inferRenderStrategy(prompt = '', category = '') {
       animationStyle: 'process',
       gameFeel: 'none',
       recommendedLibraries: ['SVG', 'Chart.js'],
-      reason: '该案例更强调图形表达、过程解释与数据反馈，适合 SVG 与图表混合呈现。'
+      reason: '该案例强调数据规律与逻辑推导，使用可视化图表配合答题模块。'
     };
   }
 
@@ -991,57 +959,37 @@ function inferRenderStrategy(prompt = '', category = '') {
     animationStyle: 'process',
     gameFeel: 'none',
     recommendedLibraries: ['Canvas', 'Chart.js'],
-    reason: '保持通用渲染策略，优先保障动画、交互和教学信息表达的平衡。'
+    reason: '综合渲染策略，平衡动画表现力与交互挑战性。'
   };
 }
 
 function inferStyleStrategy(prompt = '', category = '') {
   if (/医学|病理|血液|呼吸|细胞|药代/.test(prompt) || category === 'medicine' || category === 'biology') {
     return {
-      visualStyle: 'clinical-dashboard',
-      paletteMood: 'clean-cyan-red',
+      visualStyle: 'glass-clinical',
+      paletteMood: 'cyan-red-premium',
       textDensity: 'minimal',
       motionDensity: 'high',
-      referenceKeywords: ['洁净医学', '器官动画', '监护面板', '冷光质感']
+      referenceKeywords: ['玻璃拟态', '器官发光', '科技感监护仪', '精细细节']
     };
   }
 
   if (/轨迹|运动|力学|抛体|电路|工程|机械|流体/.test(prompt) || ['physics', 'engineering', 'electronics'].includes(category)) {
     return {
-      visualStyle: 'precision-lab',
-      paletteMood: 'blue-amber',
+      visualStyle: 'modern-lab',
+      paletteMood: 'blue-amber-high-contrast',
       textDensity: 'minimal',
       motionDensity: 'high',
-      referenceKeywords: ['工程仪表', '轨迹发光', '精密实验', '动态网格']
-    };
-  }
-
-  if (/地理|生态|循环|天气|天文/.test(prompt) || ['geography', 'environmental'].includes(category)) {
-    return {
-      visualStyle: 'immersive-system',
-      paletteMood: 'teal-green',
-      textDensity: 'compact',
-      motionDensity: 'high',
-      referenceKeywords: ['系统循环', '环境光层次', '地图感', '沉浸动画']
-    };
-  }
-
-  if (/数学|统计|经济|心理/.test(prompt) || ['mathematics', 'economics', 'psychology'].includes(category)) {
-    return {
-      visualStyle: 'editorial-data',
-      paletteMood: 'ink-blue',
-      textDensity: 'compact',
-      motionDensity: 'medium',
-      referenceKeywords: ['数据排版', '信息图', '清晰曲线', '克制高级']
+      referenceKeywords: ['精密物理', '发光轨迹', '深色背景', '动态网格']
     };
   }
 
   return {
-    visualStyle: 'premium-interactive',
-    paletteMood: 'adaptive',
+    visualStyle: 'glassmorphism-premium',
+    paletteMood: 'adaptive-modern',
     textDensity: 'minimal',
     motionDensity: 'high',
-    referenceKeywords: ['高端产品', '强反馈', '轻说明', '细节丰富']
+    referenceKeywords: ['高端审美', '平滑动效', '三维层级感', '即时反馈']
   };
 }
 
@@ -1148,6 +1096,15 @@ function inferDefaultControls(prompt = '', category = '') {
   ];
 }
 
+function inferDefaultChallenges(prompt = '', category = '') {
+  const title = extractTitle(prompt);
+  return [
+    { type: 'quiz', question: `在当前仿真环境下，${title}的核心驱动因素是什么？`, options: ['参数A', '参数B', '外部环境', '以上都是'], answer: '以上都是' },
+    { type: 'task', question: `请尝试通过调节滑块，使${title}达到预设的平衡状态。`, options: [], answer: '达到平衡' },
+    { type: 'quiz', question: `如果关键参数增加一倍，画面中的主要变化会是？`, options: ['速度加快', '颜色变深', '结构收缩', '无法判断'], answer: '速度加快' }
+  ];
+}
+
 function buildFastExperimentSpec(prompt, category) {
   const cleanPrompt = String(prompt || '').replace(/\s+/g, ' ').trim();
   const categoryId = category || 'physics';
@@ -1162,15 +1119,15 @@ function buildFastExperimentSpec(prompt, category) {
     teachingGoals: inferTeachingGoals(cleanPrompt, categoryId),
     corePhenomena: inferCorePhenomena(cleanPrompt, categoryId),
     controls: inferDefaultControls(cleanPrompt, categoryId),
-    visualModules: ['主动画区', '实时数据卡', '趋势图层'],
-    interactions: ['播放/暂停/重置', '参数变化即时反馈', '关键状态切换'],
-    dataFeedback: ['关键数值', '趋势变化', '状态提示'],
+    challenges: inferDefaultChallenges(cleanPrompt, categoryId),
+    visualModules: ['主动画区', '实时数据卡', '答题挑战模块'],
+    interactions: ['播放/暂停/重置', '参数即时联动', '交互答题反馈'],
+    dataFeedback: ['关键指标', '趋势变化', '答题评分'],
     qualityBar: [
-      '必须输出可直接运行的单文件 HTML',
-      '必须是动画化案例，而不是静态说明页',
-      '参数变化必须同步驱动画面和数据变化',
-      '页面文案要克制，避免大段提示语',
-      '禁止出现原型式提示词、引导层和教学废话'
+      '必须使用现代 Glassmorphism 视觉风格',
+      '必须包含可运行的交互式答题挑战模块',
+      '仿真必须达到 60fps 的流畅度',
+      '严禁出现占位文案和原型式提示语'
     ]
   };
 
@@ -1335,14 +1292,14 @@ function isUsableHtml(content) {
 
   const hasHtmlShell = html.includes('<html') || html.includes('<!DOCTYPE');
   const hasInteractiveScript = html.includes('<script');
-  const hasVisualLayer = html.includes('<svg') || html.includes('<canvas') || html.includes('Chart') || html.includes('PIXI') || html.includes('Phaser');
-  const hasLoop = html.includes('requestAnimationFrame') || html.includes('ticker.add') || html.includes('new Phaser.Game');
-  const hasControl = /input|button|select/.test(html);
-  const hasStateOutput = /textContent|innerText|dataset|Chart/.test(html);
-
+  const hasVisualLayer = html.includes('<svg') || html.includes('<canvas') || html.includes('Chart') || html.includes('PIXI') || html.includes('Phaser') || html.includes('getContext');
+  const hasLoop = /requestAnimationFrame|ticker\.add|new Phaser\.Game|setInterval|setTimeout/.test(html);
+  const hasControl = /input|button|select|click|change|addEventListener/.test(html);
+  
   const hasClosedDocument = /<\/body>|<\/html>/i.test(html);
 
-  return hasHtmlShell && hasInteractiveScript && hasVisualLayer && hasLoop && hasControl && hasStateOutput && hasClosedDocument && html.length > 2600;
+  // 降低最低字符数阈值到 2000，增加对多种交互方式的兼容
+  return hasHtmlShell && hasInteractiveScript && hasVisualLayer && hasLoop && (hasControl || html.includes('onclick')) && hasClosedDocument && html.length > 2000;
 }
 
 function localReviewExperiment(spec, html) {
@@ -1371,7 +1328,8 @@ function localReviewExperiment(spec, html) {
 
 async function requestChat({ preset, messages, stream = false, temperature, max_tokens = 8192, top_p, timeout = 90000, thinking, tools, tool_choice, onChunk }) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  const hasTimeout = Number.isFinite(timeout) && timeout > 0;
+  const timeoutId = hasTimeout ? setTimeout(() => controller.abort(), timeout) : null;
   let fullContent = '';
   let buffer = '';
 
@@ -1472,7 +1430,10 @@ async function requestChat({ preset, messages, stream = false, temperature, max_
           provider: ''
         };
       }
-      throw new Error(`Kimi 在 ${Math.round(timeout / 1000)} 秒内未完成生成，请重试`);
+      if (hasTimeout) {
+        throw new Error(`Kimi 在 ${Math.round(timeout / 1000)} 秒内未完成生成，请重试`);
+      }
+      throw new Error('Kimi 生成被中断，请重试');
     }
 
     if (error.message?.includes('Failed to fetch')) {
@@ -1481,7 +1442,7 @@ async function requestChat({ preset, messages, stream = false, temperature, max_
 
     throw error;
   } finally {
-    clearTimeout(timeoutId);
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 
@@ -1506,6 +1467,7 @@ async function optimizePromptDraft(input, category) {
     stream: false,
     max_tokens: config.max_tokens,
     timeout: config.timeout,
+    temperature: 0.3,
     thinking: config.thinking,
     messages: [
       { role: 'system', content: PROMPT_OPTIMIZER_SYSTEM },
@@ -1524,6 +1486,7 @@ async function buildExperimentSpec(prompt, category) {
     stream: false,
     max_tokens: config.max_tokens,
     timeout: config.timeout,
+    temperature: 0.3,
     thinking: config.thinking,
     messages: [
       { role: 'system', content: SPEC_SYSTEM_PROMPT },
@@ -1546,6 +1509,7 @@ async function critiqueExperiment(spec, html) {
     stream: false,
     max_tokens: config.max_tokens,
     timeout: config.timeout,
+    temperature: 0.1,
     thinking: config.thinking,
     messages: [
       { role: 'system', content: REVIEW_SYSTEM_PROMPT },
@@ -1582,6 +1546,8 @@ async function streamHtmlFromSpec(spec, onChunk, onStatus, options = {}) {
         stream: true,
         max_tokens: config.max_tokens,
         timeout: config.timeout,
+        temperature: 1.0,
+        top_p: 0.95,
         thinking: config.thinking,
         onChunk,
         messages: [
@@ -1612,6 +1578,7 @@ async function repairExperiment(spec, html, review) {
     stream: false,
     max_tokens: config.max_tokens,
     timeout: config.timeout,
+    temperature: 1.0,
     thinking: config.thinking,
     messages: [
       { role: 'system', content: REPAIR_SYSTEM_PROMPT },
@@ -1643,6 +1610,8 @@ async function generateExperiment(prompt, category, onChunk, onDone, onError) {
       stream: true,
       max_tokens: config.max_tokens,
       timeout: config.timeout,
+      temperature: 1.0,
+      top_p: 0.95,
       thinking: config.thinking,
       onChunk,
       messages: [
