@@ -139,7 +139,7 @@ app.post('/api/chat', async (req, res) => {
       model,
       messages,
       stream = true,
-      temperature = 0.5,
+      temperature = 1.0,
       max_tokens = 8192,
       top_p,
       thinking,

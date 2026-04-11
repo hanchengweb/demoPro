@@ -1467,7 +1467,7 @@ async function optimizePromptDraft(input, category) {
     stream: false,
     max_tokens: config.max_tokens,
     timeout: config.timeout,
-    temperature: 0.3,
+    temperature: 0.6,
     thinking: config.thinking,
     messages: [
       { role: 'system', content: PROMPT_OPTIMIZER_SYSTEM },
@@ -1486,7 +1486,7 @@ async function buildExperimentSpec(prompt, category) {
     stream: false,
     max_tokens: config.max_tokens,
     timeout: config.timeout,
-    temperature: 0.3,
+    temperature: 0.6,
     thinking: config.thinking,
     messages: [
       { role: 'system', content: SPEC_SYSTEM_PROMPT },
@@ -1509,7 +1509,7 @@ async function critiqueExperiment(spec, html) {
     stream: false,
     max_tokens: config.max_tokens,
     timeout: config.timeout,
-    temperature: 0.1,
+    temperature: 0.6,
     thinking: config.thinking,
     messages: [
       { role: 'system', content: REVIEW_SYSTEM_PROMPT },
