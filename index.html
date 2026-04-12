@@ -307,8 +307,14 @@
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
               AI优化后的提示词（可编辑）
             </span>
+            <span id="optimized-prompt-badge" class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[11px] font-medium">将优先用于生成</span>
           </div>
           <textarea id="optimized-prompt" rows="3" class="w-full px-4 py-3 bg-indigo-50/50 border border-indigo-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-all"></textarea>
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <button onclick="applyOptimizedPromptToInput()" class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-medium hover:border-indigo-300 hover:text-indigo-600 transition-all">覆盖原提示词</button>
+            <button onclick="clearOptimizedPrompt()" class="px-3 py-1.5 bg-white border border-slate-200 text-slate-500 rounded-lg text-xs font-medium hover:border-rose-300 hover:text-rose-500 transition-all">停用优化词</button>
+            <span id="optimized-prompt-tip" class="text-xs text-slate-400">当前生成默认优先使用这份优化后的提示词。</span>
+          </div>
         </div>
         
         <!-- 生成按钮 -->
@@ -487,6 +493,34 @@
   </div>
 </div>
 
+<!-- Issue Dialog -->
+<div id="issue-dialog" class="overlay">
+  <div class="dialog w-full max-w-xl mx-4">
+    <div class="p-6 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+      <div>
+        <h2 class="text-lg font-bold text-slate-800">异常提醒</h2>
+        <p class="text-xs text-slate-400 mt-0.5">已定位到异常点，可直接尝试一键修复</p>
+      </div>
+      <button onclick="closeIssueDialog()" class="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="p-6 overflow-y-auto" style="max-height:60vh">
+      <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 mb-4">
+        <div id="issue-summary" class="text-sm font-medium text-amber-800">生成结果存在异常</div>
+      </div>
+      <div>
+        <div class="text-xs font-semibold text-slate-500 mb-2">异常点</div>
+        <div id="issue-details" class="text-sm text-slate-600 space-y-2"></div>
+      </div>
+    </div>
+    <div class="p-6 border-t border-slate-100 flex items-center justify-end gap-2">
+      <button onclick="closeIssueDialog()" class="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm text-slate-600">稍后处理</button>
+      <button id="issue-repair-btn" onclick="handleIssueRepair()" class="px-4 py-2 gradient-btn text-white rounded-xl text-sm font-medium shadow-lg shadow-indigo-500/20">一键修复</button>
+    </div>
+  </div>
+</div>
+
 <!-- Help Dialog -->
 <div id="help-dialog" class="overlay">
   <div class="dialog w-full max-w-lg mx-4">
@@ -602,6 +636,28 @@ const GENERATION_POLICY = {
   allowRepairOnlyWhenBroken: true
 };
 
+const PROMPT_OPTIMIZER_CASE_ONLY_SYSTEM = `你是顶级虚拟仿真教学案例策划专家。你的任务是把用户的原始需求，改写成一份更适合 AI 直接生成“高质量案例成品”的中文提示词。
+
+你的优化重点只放在案例设计层，不要写代码实现要求，不要规定类名、框架、函数、语法结构，也不要教模型如何编程。
+
+请重点优化这些内容：
+1. 案例主题理解：明确该案例真正要表达的机制、现象、教学目标和核心对象。
+2. 画面构成：明确主场景、关键视觉对象、数据面板、信息层次和整体气质，让案例首屏就像成品。
+3. 交互设计：明确用户可调参数、关键反馈、悬浮说明、挑战任务、答案游戏或轻互动闭环。
+4. 教学表达：强调中文界面、术语准确、文字克制、画面优先、机制优先。
+5. 体验目标：强调精致、流畅、直观、有吸引力，避免原型感、说明书感、静态示意图感。
+
+禁止输出：
+- 具体代码方案
+- 类名、函数名、框架名、库名
+- “请使用 ES6 Class / Canvas / SVG / PixiJS / Phaser” 之类实现指令
+
+输出要求：
+- 只输出优化后的提示词正文
+- 使用简体中文
+- 语气专业、凝练、直接可用
+- 长度控制在 220 到 360 字之间`;
+
 const PROMPT_OPTIMIZER_SYSTEM = `你是顶级虚拟仿真教学案例策划专家。你的任务是将需求改写为一份具备“工业级精细度”的专业提示词。
 
 重构指令（中立版）：
@@ -613,6 +669,112 @@ const PROMPT_OPTIMIZER_SYSTEM = `你是顶级虚拟仿真教学案例策划专�
 6. 语言规范：生成后的案例界面文案、按钮、标题、提示、图例、挑战文本、悬浮说明必须默认使用简体中文，只有 ARDS、DNA、pH、mmHg 等必要专业缩写可保留。
 
 输出要求：只输出优化后的提示词正文，字数 300-400 字，语气专业且严谨。`;
+
+const PROMPT_OPTIMIZER_MODEL_CENTERED_SYSTEM = `你是顶级虚拟仿真教学案例策划专家。你的任务是把用户的原始需求，改写成一份更适合 AI 直接生成“高质量案例成品”的中文提示词。
+
+这次优化必须采用“模型中心”思路，而不是页面中心思路。
+
+优化原则：
+1. 先明确案例最核心的可视化对象或机制单元，例如解剖结构、物理系统、工程结构、反应单元、算法过程。
+2. 先判断该题更适合单主模型、对照模型，还是联动看板；只有题目本身存在清晰对照关系时，才优先采用正常/异常、前/后、输入/输出、施加/响应、标准/扰动这类对照构图。
+3. 明确要求把关键机制映射为真实可见的对象变化，例如形变、流动、积聚、传递、阻断、受力、扩散、碰撞、分层、相变。
+4. 强调悬浮说明必须围绕真实模型对象触发，而不是悬浮在空白区域讲概念。
+5. 控件和指标只是服务模型表达，不能喧宾夺主；页面重点应放在核心模型本体和动态演示上。
+6. 画面必须精致、立体、有层次，避免平面示意图、原型感页面、说明书式布局。
+7. 所有界面文字默认使用简体中文，文案克制，画面优先。
+8. 主模型画面必须具有明确的前景、中景、背景分层，并通过遮挡关系、半透明叠层、投影、高光、渐变体积、局部景深弱化与透视缩放营造仿 3D 空间感，避免平面示意图和二维切片图感。
+9. 如果题目涉及器官、病理、生理或工程内部结构，默认优先选择教学演示层级或中观功能模型；除非用户明确要求，否则不要自动下钻到显微切片、超微结构或过度微观界面。
+10. 对于病理、生理、医学机制类案例，主画面只聚焦 1 到 3 个最关键机制，其余机制放入悬浮说明、指标联动或挑战反馈中，不要把全部机制同时塞入主模型。
+
+禁止输出：
+- 具体代码方案
+- 类名、函数名、框架名、库名
+- 任何实现层指令
+
+输出要求：
+- 只输出优化后的提示词正文
+- 使用简体中文
+- 语气专业、凝练、直接可用
+- 必须保留用户已经明确表达的核心偏好，尤其是模型形态、构图倾向、交互层丰富度、视觉空间感，不得擅自改写成更保守或更学术的另一种表达
+- 如果用户明确偏好球体、囊泡、泡状结构、对照视图、较丰富控件、仿 3D 空间感，优化后必须把这些偏好强化成更硬的生成约束
+- 如果用户没有明确要求显微、切片、横截面、组织学或超微结构视角，不能在优化时自动把案例改写到这些方向
+- 对于医学、病理、生理、器官内部结构类案例，优先写成“教学仿真成品提示词”，而不是学术说明文；要明确主模型形态、关键可见机制、教学交互层和视觉层次
+- 长度控制在 260 到 420 字之间`; 
+
+const MODEL_CENTERED_CASE_REQUIREMENTS = `Model-centered case requirements:
+- First build the core visual model of the case, then build controls and panels around it.
+- The main scene must be organized around a clearly identifiable mechanism unit, not abstract decorative motion.
+- First choose the right composition strategy for the topic: single-focus, dual-contrast, or dashboard-linked.
+- Prefer visible comparison structures such as normal vs abnormal, before vs after, input vs output, force vs response, or stable vs disturbed states only when the topic naturally supports comparison.
+- Map each key mechanism to visible object changes such as flow, blockage, diffusion, deformation, accumulation, transfer, collision, oscillation, stress, or phase change.
+- The main simulation must feel pseudo-3D rather than flat: enforce foreground/midground/background layering, occlusion, transparency stacking, glow, shadow, volumetric gradients, and depth contrast.
+- Tooltips must anchor to real visual objects, regions, paths, or indicators in the simulation, not empty overlay hints.
+- Data cards and controls must reflect the model state and must not overpower the core simulation scene.
+- For pathology, physiology, or medically dense topics, keep the main scene focused on 1 to 3 dominant mechanisms and move secondary mechanisms into tooltips, metrics, or challenge feedback.
+- If the topic is scientific or technical, the viewer should understand the mechanism mainly from the animated model itself, not from long explanatory text.`;
+
+const DIRECT_CASE_PROMPT_MODEL_CENTERED = `You are a principal engineer for interactive simulation cases.
+Return only one complete, production-ready HTML document.
+
+Hard requirements:
+1. Start with <!DOCTYPE html> and end with </html>.
+2. Use a real visual simulation layer with canvas or svg.
+3. The page must run directly in a browser with no build step.
+4. All JavaScript must be fully implemented. No TODO, no pseudo code, no omitted sections.
+5. Comments must be on their own line. Never place executable code after // on the same line.
+6. Declare variables before use and avoid scope bugs.
+7. Close every HTML tag and template string correctly.
+8. Use ES6 classes for core simulation objects when the case includes a dynamic mechanism.
+9. Keep the interface concise. No prototype-style filler text or long onboarding copy.
+10. The result must feel like a finished teaching product with polished visuals, responsive interaction, and stable logic.
+11. All user-facing interface text must be in Simplified Chinese by default. English is allowed only for strict technical abbreviations, units, formulas, APIs, or universally recognized symbols.
+12. The case must be model-centered: the core mechanism should be understandable mainly from the animated visual model, not from surrounding text.
+13. Build the main mechanism scene first, then attach controls, indicators, and challenges around it.
+14. Choose the composition strategy based on the topic itself: single-focus, dual-contrast, or dashboard-linked.
+15. Use side-by-side or linked contrast states only when the topic naturally contains a meaningful comparison.
+16. If the topic involves anatomy, pathology, physiology, or internal engineering structure, default to a teaching-scale or mesoscopic functional model unless the user explicitly asks for a microscopic or ultrastructural view.
+17. The visual scene must preserve pseudo-3D depth through layered foreground/midground/background composition, transparency stacking, shadow, glow, volume gradients, and occlusion. Do not flatten the model into a simple diagram or thin cross-section.
+18. For pathology, physiology, or medically dense topics, keep the main scene focused on 1 to 3 dominant mechanisms and move secondary mechanisms into tooltips, metrics, or challenge feedback.
+19. Make key mechanism changes visible through object behavior, structure change, flow, accumulation, transfer, deformation, or occlusion rather than generic particle decoration.
+
+Visual direction:
+- dark premium dashboard
+- glassmorphism panels
+- neon highlights
+- layered composition
+- pseudo-3D depth through glow, shadow, parallax, scale contrast, and occlusion
+
+Interaction direction:
+- at least one true simulation loop
+- parameter controls with immediate visual response
+- hover tooltip tied to actual visual entities
+- challenge or verification tasks with visible feedback
+
+Output:
+- source code only
+- no markdown fences
+- no explanation`;
+
+const DIRECT_KIMI_CASE_MODEL_CENTERED_SYSTEM_PROMPT = `你是顶级虚拟仿真案例架构师。你的任务是直接生成具备极高审美上限和深度交互逻辑的单文件 HTML。
+
+本次生成必须采用“模型中心”原则：
+1. 先把案例最核心的模型本体做对，再去生成控制台、指标卡和说明层。
+2. 主画面必须围绕一个清晰可识别的机制单元展开，例如器官结构、装置结构、受力系统、反应单元、流场、粒子系统、网络节点、算法过程。
+3. 先判断当前题目更适合单主模型、对照模型，还是联动看板；只有题目本身存在清晰对照关系时，才使用正常/异常、前/后、输入/输出、稳定/扰动的双场景或联动对照。
+4. 如果题目涉及器官、病理、生理或工程内部结构，默认优先生成教学演示层级或中观功能模型；除非用户明确要求，否则不要自动生成显微切片、组织学横截面、超微结构界面或过度微观视角。
+5. 主模型必须优先做出仿 3D 空间感，明确区分前景、中景、背景，并通过半透明叠层、体积渐变、阴影、高光、遮挡关系和轻微透视缩放避免平面化。
+6. 对于病理、生理、医学机制类案例，主画面只聚焦 1 到 3 个最关键机制，其余机制放入 Tooltip、指标联动或挑战反馈，不要把全部机制同时压进主模型。
+7. 关键知识必须通过真实对象变化来表达，例如流动、积聚、阻断、扩散、交换、碰撞、受力、形变、传导、相变，而不是只靠文字解释。
+8. Tooltip 必须绑定到真实模型对象、区域、路径或指标上，让用户悬浮时看到对象级解释。
+9. 控件、面板、挑战与指标都是辅助层，不能抢走模型本体的主体地位。
+10. 画面必须精致、立体、有空间层次，避免平面示意图感和原型页感。
+11. 页面中所有用户可见文案默认使用简体中文，仅保留必要专业缩写、单位和国际通用符号。
+
+输出要求：
+- 只输出完整源码
+- 严禁任何解释
+- 必须是可直接运行的完整 HTML
+- 语法必须稳定完整`; 
 
 const SPEC_SYSTEM_PROMPT = `你是虚拟仿真实验产品架构师。
 
@@ -803,6 +965,24 @@ const PHYSICS_CASE_HARD_REQUIREMENTS = `Physics-case hard requirements:
 - Prefer Canvas for the main simulation layer and keep frame updates smooth.
 - Do not collapse the result into one toy mechanic if the prompt asks for a platform or multiple tasks.`;
 
+const MEDICAL_CASE_HARD_REQUIREMENTS = `Medical-case hard requirements:
+- Prefer a teaching-scale functional model over a microscopic pathology plate unless the user explicitly requests a microscopic view.
+- If the topic involves alveoli, acini, vesicles, sacs, or cystic anatomy, render the main structure as spherical, sac-like, bubble-like, or clustered volumetric forms rather than flat membrane strips or thin cross-sections.
+- When the topic naturally supports comparison such as healthy vs diseased or before vs after, keep the contrast visually obvious and easy to teach from.
+- Preserve a complete teaching interaction layer: keep 3 to 5 meaningful controls or modes when the topic supports them, rather than shrinking to a single slider.
+- Make the main medical mechanism visually legible through fluid accumulation, gas exchange weakening, blood oxygenation change, structural collapse trend, or other direct object changes.
+- Use tooltip, metrics, and challenge feedback for secondary medical explanations instead of overcrowding the main scene.
+- Keep the model polished and pseudo-3D through volume gradients, rim light, transparency stacking, and organ-like spatial depth.`;
+
+const ALVEOLAR_EDEMA_CASE_HARD_REQUIREMENTS = `Alveolar-edema case hard requirements:
+- Keep the hero scene focused on exactly two major alveolar teaching objects or two clearly separated hero alveolar units, rather than many small alveoli scattered across the canvas.
+- Each hero alveolus must be large, readable, hoverable, and visually dominant in its panel or scene.
+- Concentrate animation density inside the alveoli: continuously show O2 movement, CO2 movement, red blood cell oxygenation change, fluid accumulation, and gas-exchange weakening within the main alveolar units.
+- Do not spend too much visual budget on decorative particles, background graphs, wireframes, or excessive secondary alveoli.
+- Preserve a richer teaching control layer with at least four meaningful interactions chosen from severity, animation speed, respiratory rate, path replay, gas-exchange highlight, structure highlight, view switching, or reset.
+- Include a clear legend or in-scene key so learners can distinguish O2, CO2, capillary flow, alveolar wall, edema fluid, and red blood cells.
+- Runtime stability is mandatory: variables must be defined before use, cross-scope references must remain valid, sliders and buttons must not trigger runtime errors, and interactive handlers must safely update the scene.`;
+
 const DIRECT_REPAIR_PROMPT_V2 = `You are an expert front-end repair engineer.
 Fix the provided HTML into a complete, runnable single-file HTML document.
 
@@ -885,7 +1065,10 @@ let state = {
   exampleFilter: 'all',
   modelCatalog: [],
   defaultPreset: 'premium',
-  uploadedAssets: []
+  uploadedAssets: [],
+  lastGenerationDraft: '',
+  lastGenerationIssue: null,
+  lastPreviewIssueSignature: ''
 };
 
 // ===== STORAGE =====
@@ -1130,15 +1313,123 @@ function getCategoryContext(category) {
   return `学科领域：${catInfo.name}。领域说明：${catInfo.desc}。`;
 }
 
+function buildPromptOptimizationGuardrails(input = '', category = '') {
+  const text = String(input || '');
+  const guards = [];
+
+  if (/肺泡|病理|肺水肿|呼吸膜|毛细血管|医学|生理/.test(text) || category === 'medicine') {
+    guards.push('若题目涉及肺泡、病理、生理或医学内部结构，默认优先保持教学演示层级或中观功能模型，不要自动改写成显微切片、横截面膜层图或超微结构界面。');
+    guards.push('医学病理类优化后应更像教学仿真成品指令，而不是偏论文式、说明书式或病理术语堆砌式表述。');
+  }
+
+  if (/肺泡|球体|球形|囊泡|泡状|泡泡/.test(text)) {
+    guards.push('若用户提到肺泡、球体、囊泡或泡状结构，优化后必须明确主模型采用球囊、囊泡簇或泡状体积结构，避免平直膜层、带状屏障或二维剖面。');
+    guards.push('若题目为肺泡相关案例，优化后应优先强调两个大型主肺泡或两个清晰主肺泡单元，而不是生成过多小肺泡分散注意力。');
+    guards.push('肺泡内部应成为主要动画舞台，持续展示 O2、CO2、红细胞、积液和交换效率变化，不要把动画预算花在背景装饰上。');
+  }
+
+  if (/对照|正常|异常|水肿|病变|前后/.test(text)) {
+    guards.push('若用户已经表达正常/异常、水肿/健康、前后变化等对照意图，应保留并强化这种构图偏好，而不是改写成单一界面图。');
+  }
+
+  if (/仿3d|仿 3d|立体|空间感|层次|球体/.test(text)) {
+    guards.push('若用户强调仿 3D、立体、空间感或层次感，优化后必须明确前景、中景、背景、遮挡、体积渐变、高光与阴影这些视觉要求。');
+  }
+
+  if (/控件|交互|悬浮|模式|挑战|滑杆|按钮|回放/.test(text)) {
+    guards.push('若用户希望教学交互完整，优化后不要把交互收缩成极少控件；应保留 3 到 5 个真正影响画面、指标或模式切换的教学交互点。');
+  }
+
+  if (/肺泡|肺水肿|病理|医学/.test(text) || category === 'medicine') {
+    guards.push('若案例属于肺泡病理或医学教学仿真，优化后应优先保留这些交互层：病情/水肿程度调节、播放或病程回放、结构高亮或悬浮解释、对照/单视图切换，以及至少一组实时联动指标。');
+    guards.push('若题目是肺泡水肿或气体交换类案例，优化后应明确要求图例区或图例化标识，帮助用户区分 O2、CO2、毛细血管、肺泡壁、积液和红细胞。');
+    guards.push('优化后应明确要求代码稳定性：滑块、按钮、悬浮提示交互不得报错，不允许出现变量未定义或跨作用域引用失效。');
+  }
+
+  guards.push('优化时必须先判断哪些内容属于主模型必须可见的核心机制，哪些内容属于辅助说明层，避免把全部知识点平均摊进画面导致模型变薄。');
+  return guards.join('\n');
+}
+
+function getOptimizedPromptValue() {
+  const container = document.getElementById('optimized-prompt-container');
+  const textarea = document.getElementById('optimized-prompt');
+  if (!container || !textarea || container.classList.contains('hidden')) {
+    return '';
+  }
+  return textarea.value.trim();
+}
+
+function getEffectiveGenerationPrompt() {
+  const optimizedPrompt = getOptimizedPromptValue();
+  if (optimizedPrompt) {
+    return { prompt: optimizedPrompt, source: 'optimized' };
+  }
+
+  const rawPrompt = document.getElementById('prompt-input').value.trim();
+  return { prompt: rawPrompt, source: 'raw' };
+}
+
+function refreshPromptExperience() {
+  const generateBtn = document.getElementById('generate-btn');
+  const badge = document.getElementById('optimized-prompt-badge');
+  const tip = document.getElementById('optimized-prompt-tip');
+  const source = getEffectiveGenerationPrompt().source;
+
+  if (badge) {
+    badge.textContent = source === 'optimized' ? '将优先用于生成' : '当前未启用';
+    badge.className = source === 'optimized'
+      ? 'px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[11px] font-medium'
+      : 'px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[11px] font-medium';
+  }
+
+  if (tip) {
+    tip.textContent = source === 'optimized'
+      ? '当前生成默认优先使用这份优化后的提示词。'
+      : '当前将使用上方原始提示词生成。';
+  }
+
+  if (generateBtn && !state.isGenerating) {
+    generateBtn.innerHTML = source === 'optimized'
+      ? `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> 用优化词生成`
+      : `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> 生成实验`;
+  }
+}
+
+function applyOptimizedPromptToInput() {
+  const optimizedPrompt = getOptimizedPromptValue();
+  if (!optimizedPrompt) return;
+  document.getElementById('prompt-input').value = optimizedPrompt;
+  state.prompt = optimizedPrompt;
+  refreshPromptExperience();
+}
+
+function clearOptimizedPrompt() {
+  const optimizedPrompt = document.getElementById('optimized-prompt');
+  const container = document.getElementById('optimized-prompt-container');
+  if (optimizedPrompt) optimizedPrompt.value = '';
+  if (container) container.classList.add('hidden');
+  refreshPromptExperience();
+}
+
 function buildDirectGenerationRequirements(prompt = '', category = '') {
-  const requirements = [DIRECT_OUTPUT_CONTRACT, GENERIC_CASE_HARD_REQUIREMENTS];
+  const requirements = [DIRECT_OUTPUT_CONTRACT, GENERIC_CASE_HARD_REQUIREMENTS, MODEL_CENTERED_CASE_REQUIREMENTS];
   const normalizedPrompt = String(prompt || '');
   const isPhysicsFamily = ['physics', 'engineering', 'electronics'].includes(category);
+  const isMedicalFamily = category === 'medicine' || /肺泡|肺水肿|病理|生理|医学|器官|毛细血管|呼吸膜/i.test(normalizedPrompt);
+  const isAlveolarEdemaFamily = /肺泡|肺水肿|气体交换|氧合|呼吸膜|毛细血管/i.test(normalizedPrompt);
   const asksStateMachine = /Explore|Challenge|状态机|模式切换|自由探索|任务验证/i.test(normalizedPrompt);
   const asksEntityClasses = /Node|Particle|StructuralEntity/i.test(normalizedPrompt);
 
   if (isPhysicsFamily || asksStateMachine || asksEntityClasses) {
     requirements.push(PHYSICS_CASE_HARD_REQUIREMENTS);
+  }
+
+  if (isMedicalFamily) {
+    requirements.push(MEDICAL_CASE_HARD_REQUIREMENTS);
+  }
+
+  if (isAlveolarEdemaFamily) {
+    requirements.push(ALVEOLAR_EDEMA_CASE_HARD_REQUIREMENTS);
   }
 
   if (asksEntityClasses) {
@@ -1185,11 +1476,13 @@ function findHtmlStructuralIssues(html, prompt = '', category = '') {
   if (/<title>\s*<\/title>/i.test(text) || /<body[^>]*>\s*<\/body>/i.test(text)) {
     issues.push('页面主结构过空，疑似未完整生成');
   }
-  if (/document\.getElementById\([^\)]*\)\.(?:addEventListener|onclick)/.test(text) && !/DOMContentLoaded|window\.addEventListener\(['"]load['"]|function init\(/.test(text)) {
-    issues.push('事件绑定初始化可能不稳定');
-  }
   if (!/<\/body>/i.test(text)) {
     issues.push('缺少 body 结束标签');
+  }
+
+  const syntaxErrors = validateInlineScriptSyntax(text);
+  if (syntaxErrors.length) {
+    issues.push(...syntaxErrors);
   }
 
   const wantsExactClasses = /Node|Particle|StructuralEntity/i.test(normalizedPrompt);
@@ -1202,10 +1495,11 @@ function findHtmlStructuralIssues(html, prompt = '', category = '') {
   if ((isPhysicsFamily || wantsExactClasses) && !/class\s+StructuralEntity\b/.test(text) && /StructuralEntity/i.test(normalizedPrompt)) {
     issues.push('缺少 StructuralEntity 类定义');
   }
-  if ((isPhysicsFamily || /Explore|Challenge|状态机|自由探索|任务验证/i.test(normalizedPrompt)) && !/Explore/.test(text)) {
+  const requiresModeSwitch = /Explore|Challenge|状态机|模式切换|自由探索|任务验证/i.test(normalizedPrompt);
+  if (requiresModeSwitch && !/Explore/.test(text)) {
     issues.push('缺少 Explore 模式');
   }
-  if ((isPhysicsFamily || /Explore|Challenge|状态机|自由探索|任务验证/i.test(normalizedPrompt)) && !/Challenge/.test(text)) {
+  if (requiresModeSwitch && !/Challenge/.test(text)) {
     issues.push('缺少 Challenge 模式');
   }
 
@@ -1222,8 +1516,8 @@ function getCriticalStructuralIssues(issues = []) {
     /存在注释吞掉后续可执行代码的风险/,
     /可能存在 width 或 height 作用域错误/,
     /页面主结构过空/,
-    /事件绑定初始化可能不稳定/,
     /缺少 body 结束标签/,
+    /脚本语法错误/,
     /HTML 可运行性校验未通过/
   ];
 
@@ -1630,6 +1924,62 @@ function extractCode(content) {
   return trimmed;
 }
 
+function getInlineScriptBlocks(content) {
+  const html = extractCode(content || '');
+  return [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map((match, index) => ({
+    index,
+    code: match[1] || ''
+  }));
+}
+
+function validateInlineScriptSyntax(content) {
+  const blocks = getInlineScriptBlocks(content);
+  const errors = [];
+
+  for (const block of blocks) {
+    const script = String(block.code || '').trim();
+    if (!script) continue;
+
+    try {
+      new Function(script);
+    } catch (error) {
+      const message = error?.message || '脚本语法错误';
+      errors.push(`脚本语法错误（script #${block.index + 1}）：${message}`);
+    }
+  }
+
+  return errors;
+}
+
+function hasTargetedRepairableIssues(issues = []) {
+  return issues.some((issue) => /脚本语法错误|作用域错误|HTML 可运行性校验未通过/.test(issue));
+}
+
+function applyBasicHtmlFixes(content) {
+  let html = extractCode(content || '');
+  if (!html) return html;
+
+  html = html.replace(/^\s*```html\s*/i, '').replace(/^\s*```\s*/i, '').replace(/```+\s*$/g, '').trim();
+
+  if (!/^\s*<!DOCTYPE html>/i.test(html) && /<html[\s>]/i.test(html)) {
+    html = `<!DOCTYPE html>\n${html}`;
+  }
+
+  if (!/<\/body>/i.test(html) && /<\/html>/i.test(html)) {
+    html = html.replace(/<\/html>/i, '</body>\n</html>');
+  }
+
+  if (!/<\/html>\s*$/i.test(html)) {
+    if (!/<\/body>/i.test(html)) {
+      html = `${html}\n</body>\n</html>`;
+    } else {
+      html = `${html}\n</html>`;
+    }
+  }
+
+  return html.trim();
+}
+
 function isUsableHtml(content) {
   const html = extractCode(content);
   if (!html) return false;
@@ -1641,8 +1991,9 @@ function isUsableHtml(content) {
   const hasControl = /input|button|select|click|change|addEventListener/.test(html);
   const hasClosedDocument = /<\/body>|<\/html>/i.test(html);
   const hasCommentCollision = /\/\/[^\n]*(?:\bif\s*\(|\bfor\s*\(|\bwhile\s*\(|\bconst\s+|\blet\s+|\bvar\s+|\bclass\s+|\bfunction\s+)/.test(html);
+  const syntaxErrors = validateInlineScriptSyntax(html);
 
-  return hasHtmlShell && hasInteractiveScript && hasVisualLayer && hasLoop && (hasControl || html.includes('onclick')) && hasClosedDocument && !hasCommentCollision && html.length > 2000;
+  return hasHtmlShell && hasInteractiveScript && hasVisualLayer && hasLoop && (hasControl || html.includes('onclick')) && hasClosedDocument && !hasCommentCollision && syntaxErrors.length === 0 && html.length > 2000;
 }
 
 function localReviewExperiment(spec, html) {
@@ -1804,6 +2155,7 @@ async function optimizePromptDraft(input, category) {
     throw new Error('优化提示词前请先配置并启用 MOONSHOT_API_KEY');
   }
   const categoryHint = getCategoryContext(category);
+  const guardrails = buildPromptOptimizationGuardrails(input, category);
 
   return requestChatText({
     preset: preset.id,
@@ -1813,8 +2165,8 @@ async function optimizePromptDraft(input, category) {
     temperature: 0.6,
     thinking: config.thinking,
     messages: [
-      { role: 'system', content: PROMPT_OPTIMIZER_SYSTEM },
-      { role: 'user', content: `${categoryHint}\n用户原始需求：${input}` }
+      { role: 'system', content: PROMPT_OPTIMIZER_MODEL_CENTERED_SYSTEM },
+      { role: 'user', content: `${categoryHint}\n用户原始需求：${input}\n\n优化保真约束：\n${guardrails}` }
     ]
   });
 }
@@ -1948,17 +2300,6 @@ async function generateExperiment(prompt, category, onChunk, onDone, onError) {
     }
     setGeneratingStatus(`Kimi 正在生成... (${preset.label || preset.id})`);
 
-    let medicalBlueprint = null;
-    if (isMedicalCase(category, prompt)) {
-      setGeneratingStatus('Kimi 正在理解案例...');
-      const blueprintResult = await buildMedicalCaseBlueprint(prompt, category, (content) => {
-        if (content.length > 1200) {
-          setGeneratingStatus('Kimi 正在理解案例...');
-        }
-      });
-      medicalBlueprint = blueprintResult.blueprint;
-    }
-    const useThinking = false;
     setGeneratingStatus(`Kimi 正在生成... (${preset.label || preset.id})`);
 
     const result = await requestChat({
@@ -1969,29 +2310,41 @@ async function generateExperiment(prompt, category, onChunk, onDone, onError) {
       thinking: { type: 'disabled' },
       onChunk,
       messages: [
-        { role: 'system', content: DIRECT_CASE_PROMPT_V2 },
-        { role: 'system', content: DIRECT_KIMI_CASE_SYSTEM_PROMPT },
-        { role: 'user', content: attachMedicalBlueprintToUserContent(buildDirectUserContent(prompt, category), medicalBlueprint) }
+        { role: 'system', content: DIRECT_CASE_PROMPT_MODEL_CENTERED },
+        { role: 'system', content: DIRECT_KIMI_CASE_MODEL_CENTERED_SYSTEM_PROMPT },
+        { role: 'user', content: buildDirectUserContent(prompt, category) }
       ]
     });
 
-    let finalHtml = extractCode(result.content);
+    let finalHtml = applyBasicHtmlFixes(result.content);
     let issues = findHtmlStructuralIssues(finalHtml, prompt, category);
     if (!isUsableHtml(finalHtml)) {
       issues = Array.from(new Set(['HTML 可运行性校验未通过', ...issues]));
     }
-    const criticalIssues = getCriticalStructuralIssues(issues);
+    let criticalIssues = getCriticalStructuralIssues(issues);
 
     if (criticalIssues.length) {
-      setGeneratingStatus('Kimi 正在修复细节...');
-      finalHtml = await repairDirectExperiment(prompt, category, finalHtml, criticalIssues, medicalBlueprint, (content) => {
-        if (content.length > 1000) {
-          setGeneratingStatus('Kimi 正在修复细节...');
+      setGeneratingStatus('正在做基础补全...');
+      finalHtml = applyBasicHtmlFixes(finalHtml);
+      issues = findHtmlStructuralIssues(finalHtml, prompt, category);
+      if (!isUsableHtml(finalHtml)) {
+        issues = Array.from(new Set(['HTML 可运行性校验未通过', ...issues]));
+      }
+      criticalIssues = getCriticalStructuralIssues(issues);
+
+      if ((criticalIssues.length || !isUsableHtml(finalHtml)) && hasTargetedRepairableIssues(criticalIssues)) {
+        setGeneratingStatus('Kimi 正在修复关键语法问题...');
+        finalHtml = await repairDirectExperiment(prompt, category, finalHtml, criticalIssues, null, onChunk);
+        finalHtml = applyBasicHtmlFixes(finalHtml);
+        issues = findHtmlStructuralIssues(finalHtml, prompt, category);
+        if (!isUsableHtml(finalHtml)) {
+          issues = Array.from(new Set(['HTML 可运行性校验未通过', ...issues]));
         }
-      });
-      const repairedIssues = findHtmlStructuralIssues(finalHtml, prompt, category);
-      if (!isUsableHtml(finalHtml) || repairedIssues.length) {
-        throw new Error(`生成结果未通过校验：${repairedIssues.slice(0, 3).join('；') || 'HTML 仍不完整'}`);
+        criticalIssues = getCriticalStructuralIssues(issues);
+      }
+
+      if (!isUsableHtml(finalHtml) || criticalIssues.length) {
+        throw new Error(`生成结果未通过校验：${criticalIssues.slice(0, 3).join('；') || 'HTML 仍不完整'}`);
       }
     }
 
@@ -2217,6 +2570,162 @@ function toggleDialog(name) {
   }
 }
 
+function escapeHtml(text = '') {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function normalizeIssueList(message = '', fallbackIssues = []) {
+  const parts = String(message || '')
+    .replace(/^生成失败[:：]?\s*/i, '')
+    .replace(/^生成结果未通过校验[:：]?\s*/i, '')
+    .split(/[；\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const merged = [...fallbackIssues, ...parts].filter(Boolean);
+  return Array.from(new Set(merged)).slice(0, 6);
+}
+
+function rememberGenerationIssue({ prompt = '', category = '', html = '', error = '', issues = [], source = 'generate' }) {
+  state.lastGenerationIssue = {
+    prompt,
+    category,
+    html,
+    error,
+    issues: normalizeIssueList(error, issues),
+    source
+  };
+}
+
+function closeIssueDialog() {
+  const dialog = document.getElementById('issue-dialog');
+  if (dialog) dialog.classList.remove('active');
+}
+
+function showIssueDialog(summary, issues = [], canRepair = false) {
+  const dialog = document.getElementById('issue-dialog');
+  const summaryEl = document.getElementById('issue-summary');
+  const detailsEl = document.getElementById('issue-details');
+  const repairBtn = document.getElementById('issue-repair-btn');
+  if (!dialog || !summaryEl || !detailsEl || !repairBtn) return;
+
+  const normalizedIssues = normalizeIssueList(summary, issues);
+  summaryEl.textContent = summary || '检测到异常';
+  detailsEl.innerHTML = normalizedIssues.length
+    ? normalizedIssues.map((item) => `<div class="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">${escapeHtml(item)}</div>`).join('')
+    : '<div class="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">暂未识别到更具体的异常点</div>';
+  repairBtn.classList.toggle('hidden', !canRepair);
+  dialog.classList.add('active');
+}
+
+async function handleIssueRepair() {
+  const repairBtn = document.getElementById('issue-repair-btn');
+  const issue = state.lastGenerationIssue;
+  if (!issue || !issue.html) {
+    alert('当前没有可修复的生成草稿，请重新生成一次');
+    return;
+  }
+
+  const originalText = repairBtn.innerHTML;
+  repairBtn.disabled = true;
+  repairBtn.innerHTML = '修复中...';
+  setGeneratingStatus('Kimi 正在修复异常...');
+
+  try {
+    const repairedHtml = await repairDirectExperiment(
+      issue.prompt,
+      issue.category,
+      issue.html,
+      issue.issues,
+      null,
+      () => {}
+    );
+
+    let finalHtml = applyBasicHtmlFixes(repairedHtml);
+    let issues = findHtmlStructuralIssues(finalHtml, issue.prompt, issue.category);
+    if (!isUsableHtml(finalHtml)) {
+      issues = Array.from(new Set(['HTML 可运行性校验未通过', ...issues]));
+    }
+    const criticalIssues = getCriticalStructuralIssues(issues);
+    if (!isUsableHtml(finalHtml) || criticalIssues.length) {
+      throw new Error(`修复后仍存在问题：${criticalIssues.slice(0, 3).join('；') || 'HTML 仍不完整'}`);
+    }
+
+    const experiment = {
+      id: Date.now().toString(),
+      title: extractTitle(issue.prompt),
+      description: issue.prompt.slice(0, 100),
+      code: finalHtml,
+      createdAt: new Date().toISOString(),
+      category: issue.category || state.selectedCategory || 'physics',
+      promptSource: 'repair',
+      originalPrompt: issue.prompt,
+      effectivePrompt: issue.prompt
+    };
+
+    state.currentExperiment = experiment;
+    state.history.unshift(experiment);
+    if (state.history.length > 50) state.history = state.history.slice(0, 50);
+    state.lastGenerationDraft = finalHtml;
+    saveState();
+    closeIssueDialog();
+    showPreview(finalHtml);
+  } catch (error) {
+    rememberGenerationIssue({
+      prompt: issue.prompt,
+      category: issue.category,
+      html: issue.html,
+      error: error.message || '修复失败',
+      issues: normalizeIssueList(error.message || '修复失败', issue.issues),
+      source: 'repair'
+    });
+    showIssueDialog(error.message || '修复失败', normalizeIssueList(error.message || '修复失败', issue.issues), true);
+  } finally {
+    repairBtn.disabled = false;
+    repairBtn.innerHTML = originalText;
+  }
+}
+
+function buildPreviewBridge(code) {
+  const bridgeScript = `<script>(function(){\n  var reported = false;\n  function send(payload){\n    if(reported) return;\n    reported = true;\n    try { parent.postMessage(Object.assign({ source: 'wemoreai-preview-error' }, payload), '*'); } catch (e) {}\n  }\n  window.addEventListener('error', function(event){\n    send({ message: event.message || '预览运行异常', filename: event.filename || '', lineno: event.lineno || 0, colno: event.colno || 0 });\n  });\n  window.addEventListener('unhandledrejection', function(event){\n    var reason = event.reason;\n    send({ message: (reason && reason.message) || String(reason || 'Promise 异常') });\n  });\n})();<\/script>`;
+
+  if (/<\/body>/i.test(code)) {
+    return code.replace(/<\/body>/i, `${bridgeScript}</body>`);
+  }
+  return `${code}\n${bridgeScript}`;
+}
+
+window.addEventListener('message', (event) => {
+  const data = event.data;
+  if (!data || data.source !== 'wemoreai-preview-error') return;
+
+  const signature = `${data.message || ''}|${data.filename || ''}|${data.lineno || 0}|${data.colno || 0}`;
+  if (signature === state.lastPreviewIssueSignature) return;
+  state.lastPreviewIssueSignature = signature;
+
+  const detail = data.filename
+    ? `${data.message || '预览运行异常'}（${data.filename}:${data.lineno || 0}:${data.colno || 0}）`
+    : (data.message || '预览运行异常');
+  const repairHtml = state.currentExperiment?.code || state.lastGenerationDraft || '';
+  const repairPrompt = state.currentExperiment?.effectivePrompt || state.currentExperiment?.description || state.prompt || '';
+  const repairCategory = state.currentExperiment?.category || state.selectedCategory || 'physics';
+
+  rememberGenerationIssue({
+    prompt: repairPrompt,
+    category: repairCategory,
+    html: repairHtml,
+    error: detail,
+    issues: [detail],
+    source: 'preview'
+  });
+  showIssueDialog(`预览出现异常：${data.message || '运行错误'}`, [detail], Boolean(repairHtml));
+});
+
 function handleLogin() {
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value;
@@ -2316,6 +2825,7 @@ async function handleOptimizePrompt() {
     if (optimizedPrompt) {
       document.getElementById('optimized-prompt').value = optimizedPrompt;
       document.getElementById('optimized-prompt-container').classList.remove('hidden');
+      refreshPromptExperience();
     }
   } catch (err) {
     alert('提示词优化失败：' + err.message);
@@ -2327,10 +2837,15 @@ async function handleOptimizePrompt() {
 
 async function handleGenerate() {
   const inputPrompt = document.getElementById('prompt-input').value.trim();
-  const prompt = inputPrompt;
+  const generationInput = getEffectiveGenerationPrompt();
+  const prompt = generationInput.prompt;
   
-  if (!prompt) {
+  if (!inputPrompt) {
     alert('请先输入实验需求');
+    return;
+  }
+  if (!prompt) {
+    alert('请先输入或生成可用的提示词');
     return;
   }
   if (state.isGenerating) return;
@@ -2339,14 +2854,18 @@ async function handleGenerate() {
 
   state.isGenerating = true;
   state.prompt = prompt;
-  updateGenerateButton(true);
-  showGeneratingState();
+  updateGenerateButton(true, generationInput.source);
+  showGeneratingState(generationInput.source);
 
   let chunkCount = 0;
+  let currentDraft = '';
+  state.lastGenerationDraft = '';
   generateExperiment(
     prompt,
     state.selectedCategory,
     (content) => {
+      currentDraft = content;
+      state.lastGenerationDraft = content;
       chunkCount++;
       if (chunkCount % 8 === 0) {
         setGeneratingStatus(`Kimi 正在生成... 已输出 ${content.length} 字符`);
@@ -2361,9 +2880,14 @@ async function handleGenerate() {
         description: meta?.spec?.summary || prompt.slice(0, 100),
         code: code,
         createdAt: new Date().toISOString(),
-        category: state.selectedCategory || 'physics'
+        category: state.selectedCategory || 'physics',
+        promptSource: generationInput.source,
+        originalPrompt: inputPrompt,
+        effectivePrompt: prompt
       };
       state.currentExperiment = experiment;
+      state.lastGenerationDraft = code;
+      state.lastGenerationIssue = null;
       state.history.unshift(experiment);
       if (state.history.length > 50) state.history = state.history.slice(0, 50);
       saveState();
@@ -2373,7 +2897,15 @@ async function handleGenerate() {
       state.isGenerating = false;
       updateGenerateButton(false);
       showEmptyState();
-      alert('生成失败: ' + error);
+      rememberGenerationIssue({
+        prompt,
+        category: state.selectedCategory || 'physics',
+        html: applyBasicHtmlFixes(currentDraft || ''),
+        error,
+        issues: normalizeIssueList(error),
+        source: generationInput.source
+      });
+      showIssueDialog(`生成失败：${error}`, normalizeIssueList(error), Boolean(currentDraft));
     }
   );
 }
@@ -2391,14 +2923,18 @@ function extractTitle(prompt) {
   return prompt.slice(0, 20) + (prompt.length > 20 ? '...' : '');
 }
 
-function updateGenerateButton(generating) {
+function updateGenerateButton(generating, source = getEffectiveGenerationPrompt().source) {
   const btn = document.getElementById('generate-btn');
   if (generating) {
-    btn.innerHTML = `<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> 生成中...`;
+    btn.innerHTML = source === 'optimized'
+      ? `<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> 正在用优化词生成...`
+      : `<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> 生成中...`;
     btn.disabled = true;
     btn.classList.add('opacity-75');
   } else {
-    btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> 生成实验`;
+    btn.innerHTML = source === 'optimized'
+      ? `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> 用优化词生成`
+      : `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> 生成实验`;
     btn.disabled = false;
     btn.classList.remove('opacity-75');
   }
@@ -2411,12 +2947,12 @@ function showEmptyState() {
   document.getElementById('code-view').classList.add('hidden');
 }
 
-function showGeneratingState() {
+function showGeneratingState(source = getEffectiveGenerationPrompt().source) {
   document.getElementById('empty-state').classList.add('hidden');
   document.getElementById('generating-state').classList.remove('hidden');
   document.getElementById('preview-iframe').classList.add('hidden');
   document.getElementById('code-view').classList.add('hidden');
-  setGeneratingStatus('Kimi 正在生成...');
+  setGeneratingStatus(source === 'optimized' ? 'Kimi 正在按优化后的提示词生成...' : 'Kimi 正在生成...');
 }
 
 function showPreview(code) {
@@ -2427,7 +2963,7 @@ function showPreview(code) {
     const iframe = document.getElementById('preview-iframe');
     iframe.classList.remove('hidden');
     document.getElementById('code-view').classList.add('hidden');
-    iframe.srcdoc = code;
+    iframe.srcdoc = buildPreviewBridge(code);
   } else {
     document.getElementById('preview-iframe').classList.add('hidden');
     document.getElementById('code-view').classList.remove('hidden');
@@ -2479,6 +3015,7 @@ function handleNewExperiment() {
   state.uploadedAssets = [];
   renderAssetList();
   state.prompt = '';
+  refreshPromptExperience();
   showEmptyState();
 }
 
@@ -2561,6 +3098,7 @@ async function init() {
   renderPortalSubjects();
   renderAssetList();
   refreshModelHints();
+  refreshPromptExperience();
   await fetchModelCatalog();
 }
 
