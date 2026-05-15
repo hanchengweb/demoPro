@@ -25,11 +25,17 @@ const MODEL_PRESETS = {
   quick: {
     id: 'quick',
     label: '快速',
-    description: '偏向低成本与高吞吐，适合提纲和快速试跑。',
+    description: '偏向低成本与高吞吐，适合提纲、试跑和快速迭代。',
     provider: 'deepseek',
     envKey: 'DEEPSEEK_API_KEY',
     endpoint: 'https://api.deepseek.com/chat/completions',
-    model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+    model: process.env.DEEPSEEK_QUICK_MODEL || 'deepseek-v4-flash',
+    defaults: {
+      thinking: { type: 'disabled' },
+      reasoning_effort: 'high',
+      temperature: 0.45,
+      top_p: 0.85,
+    },
   },
   balanced: {
     id: 'balanced',
@@ -43,16 +49,34 @@ const MODEL_PRESETS = {
   premium: {
     id: 'premium',
     label: '精品',
-    description: '偏向高质量交互界面与成品感，适合最终导出版本。',
+    description: '使用 DeepSeek V4 Pro，偏向复杂推理、交互完成度与最终成品质量。',
+    provider: 'deepseek',
+    envKey: 'DEEPSEEK_API_KEY',
+    endpoint: 'https://api.deepseek.com/chat/completions',
+    model: process.env.DEEPSEEK_MODEL || 'deepseek-v4-pro',
+    defaults: {
+      thinking: { type: 'enabled' },
+      reasoning_effort: 'max',
+      temperature: 0.55,
+      top_p: 0.9,
+    },
+  },
+  kimiHidden: {
+    id: 'kimiHidden',
+    label: 'Kimi 隐藏备份',
+    description: '保留旧版 Kimi 接入，不在界面展示。',
     provider: 'moonshot',
     envKey: 'MOONSHOT_API_KEY',
     endpoint: 'https://api.moonshot.cn/v1/chat/completions',
     model: process.env.MOONSHOT_MODEL || 'kimi-k2.5',
+    hidden: true,
   },
 };
 
 function listPresets() {
-  return Object.values(MODEL_PRESETS).map((preset) => ({
+  return Object.values(MODEL_PRESETS)
+    .filter((preset) => !preset.hidden)
+    .map((preset) => ({
     id: preset.id,
     label: preset.label,
     description: preset.description,
@@ -113,8 +137,20 @@ function sanitizeMessages(messages) {
 }
 
 function normalizeProviderError(selected, text = '', status = 500) {
-  if (selected?.provider !== 'moonshot') {
-    return text || `${selected?.provider || 'provider'} 请求失败`;
+  if (selected?.provider === 'deepseek') {
+    if (/insufficient balance|余额不足/i.test(text)) {
+      return 'DeepSeek 余额不足，请充值后重试。';
+    }
+    if (/rate limit|too many requests/i.test(text)) {
+      return 'DeepSeek 请求过于频繁，请稍后再试。';
+    }
+    if (/context length|maximum context|max context/i.test(text)) {
+      return 'DeepSeek 输入内容过长，请精简提示词或附件后重试。';
+    }
+    if (/invalid.*reasoning_effort|invalid.*thinking/i.test(text)) {
+      return 'DeepSeek 推理参数不兼容，已建议切换为默认配置后重试。';
+    }
+    return text || 'DeepSeek 官方接口返回异常，请稍后重试。';
   }
 
   if (/engine_overloaded_error|try again later/i.test(text)) {
@@ -164,6 +200,7 @@ app.post('/api/chat', async (req, res) => {
       max_tokens,
       top_p,
       thinking,
+      reasoning_effort,
       tools,
       tool_choice,
     } = req.body || {};
@@ -191,14 +228,32 @@ app.post('/api/chat', async (req, res) => {
 
     if (typeof max_tokens === 'number' && Number.isFinite(max_tokens) && max_tokens > 0) {
       payload.max_tokens = max_tokens;
-    };
-
-    if (typeof temperature === 'number' && selected.provider !== 'moonshot') {
-      payload.temperature = temperature;
     }
 
-    if (typeof top_p === 'number' && selected.provider !== 'moonshot') {
-      payload.top_p = top_p;
+    const resolvedTemperature = typeof temperature === 'number'
+      ? temperature
+      : selected.defaults?.temperature;
+    if (typeof resolvedTemperature === 'number' && selected.provider !== 'moonshot') {
+      payload.temperature = resolvedTemperature;
+    }
+
+    const resolvedTopP = typeof top_p === 'number' ? top_p : selected.defaults?.top_p;
+    if (typeof resolvedTopP === 'number' && selected.provider !== 'moonshot') {
+      payload.top_p = resolvedTopP;
+    }
+
+    if (selected.provider === 'deepseek') {
+      if (thinking && typeof thinking === 'object') {
+        payload.thinking = thinking;
+      } else if (selected.defaults?.thinking) {
+        payload.thinking = selected.defaults.thinking;
+      }
+
+      if (reasoning_effort) {
+        payload.reasoning_effort = reasoning_effort;
+      } else if (selected.defaults?.reasoning_effort) {
+        payload.reasoning_effort = selected.defaults.reasoning_effort;
+      }
     }
 
     if (selected.provider === 'moonshot') {
@@ -235,15 +290,19 @@ app.post('/api/chat', async (req, res) => {
       }
 
       upstreamErrorText = await upstream.text();
-      const shouldRetryMoonshot =
-        selected.provider === 'moonshot' &&
+      const shouldRetry =
         attempt < maxAttempts &&
-        (upstream.status === 429 ||
+        (
+          upstream.status === 429 ||
           upstream.status >= 500 ||
-          upstreamErrorText.includes('engine_overloaded_error') ||
-          upstreamErrorText.includes('try again later'));
+          (
+            selected.provider === 'moonshot' &&
+            (upstreamErrorText.includes('engine_overloaded_error') ||
+             upstreamErrorText.includes('try again later'))
+          )
+        );
 
-      if (!shouldRetryMoonshot) {
+      if (!shouldRetry) {
         break;
       }
 

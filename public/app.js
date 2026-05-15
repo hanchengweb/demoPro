@@ -169,9 +169,9 @@ const PIPELINE_TEMPLATE = [
 ];
 
 const FALLBACK_PRESETS = [
-  { id: 'quick', label: '快速', description: '偏向低成本与高吞吐，适合快速试跑。', provider: 'deepseek', model: 'deepseek-chat', available: false },
+  { id: 'quick', label: '快速', description: '偏向低成本与高吞吐，适合快速试跑。', provider: 'deepseek', model: 'deepseek-v4-flash', available: false },
   { id: 'balanced', label: '平衡', description: '默认推荐，兼顾理解、代码稳定性和成品感。', provider: 'zhipu', model: 'glm-5.1', available: false },
-  { id: 'premium', label: '精品', description: '偏向界面成品感和最终导出质量。', provider: 'moonshot', model: 'kimi-k2.5', available: false },
+  { id: 'premium', label: '精品', description: 'DeepSeek V4 Pro，偏向复杂推理、界面成品感和最终导出质量。', provider: 'deepseek', model: 'deepseek-v4-pro', available: false },
 ];
 
 const state = {

@@ -1,6 +1,6 @@
 # WeMoreAI Virtual Lab
 
-一个基于 Express 的单页应用，首页静态文件通过 `public/index.html` 提供，后端接口通过 `server.js` 代理智谱模型接口。
+一个基于 Express 的单页应用，首页静态文件通过 `public/index.html` 提供，后端接口通过 `server.js` 代理多模型接口。当前默认高质量模式已切换到 DeepSeek V4。
 
 ## 本地运行
 
@@ -13,13 +13,21 @@
 
 ## 环境变量
 
-### 必填
+### 至少配置一组可用密钥
 
 - `ZHIPU_API_KEY`
-  - 用途：服务端请求智谱 `open.bigmodel.cn` 接口时的鉴权密钥
+  - 用途：平衡模式，请求智谱 `open.bigmodel.cn` 接口时的鉴权密钥
   - 使用位置：`server.js`
 
+- `DEEPSEEK_API_KEY`
+  - 用途：快速模式与精品模式，请求 `https://api.deepseek.com/chat/completions` 的鉴权密钥
+  - 默认精品模型：`DEEPSEEK_MODEL=deepseek-v4-pro`
+  - 默认快速模型：`DEEPSEEK_QUICK_MODEL=deepseek-v4-flash`
+
 ### 可选
+
+- `MOONSHOT_API_KEY`
+  - 用途：保留隐藏的 Kimi 兼容预设，不在默认界面显示
 
 - `PORT`
   - 用途：本地开发时指定服务端口
@@ -37,7 +45,11 @@
 - API 入口位于 `server.js`
 - `vercel.json` 已配置 `server.js` 的函数运行时参数
 
-部署时只需要在 Vercel 项目里补上：
+部署时建议至少补上：
+
+- `DEEPSEEK_API_KEY`
+
+如果还需要平衡模式，再补上：
 
 - `ZHIPU_API_KEY`
 

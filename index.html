@@ -1845,7 +1845,7 @@ function formatModelSetupHint() {
     return `当前可用模型：${names}`;
   }
 
-  return '当前未检测到可用模型密钥，请先配置 ZHIPU_API_KEY、MOONSHOT_API_KEY、DEEPSEEK_API_KEY 中至少一个。';
+  return '当前未检测到可用模型密钥，请先配置 ZHIPU_API_KEY、DEEPSEEK_API_KEY、MOONSHOT_API_KEY 中至少一个。';
 }
 
 function refreshModelHints() {
@@ -1864,7 +1864,7 @@ async function ensureAvailableModel(actionName, preferredIds = []) {
 
   const preset = choosePreset(preferredIds);
   if (!preset) {
-    throw new Error(`${actionName}前需要先配置模型密钥。建议先准备 ZHIPU_API_KEY、MOONSHOT_API_KEY，补充 DEEPSEEK_API_KEY。`);
+    throw new Error(`${actionName}前需要先配置模型密钥。建议优先准备 DEEPSEEK_API_KEY，其次可补充 ZHIPU_API_KEY 或隐藏的 MOONSHOT_API_KEY。`);
   }
 
   state.defaultPreset = preset.id;
@@ -2152,7 +2152,7 @@ async function optimizePromptDraft(input, category) {
   }
   const preset = state.modelCatalog.find((item) => item.id === 'premium' && item.available);
   if (!preset) {
-    throw new Error('优化提示词前请先配置并启用 MOONSHOT_API_KEY');
+    throw new Error('优化提示词前请先配置并启用 DeepSeek premium，至少需要 DEEPSEEK_API_KEY');
   }
   const categoryHint = getCategoryContext(category);
   const guardrails = buildPromptOptimizationGuardrails(input, category);
@@ -2231,7 +2231,7 @@ async function streamHtmlFromSpec(spec, onChunk, onStatus, options = {}) {
       if (onStatus) {
         onStatus(attempt === 1
           ? (fastMode
-            ? `正在用 Kimi 快速生成案例动画... (${preset.label || preset.id})`
+            ? `正在用 DeepSeek 快速生成案例动画... (${preset.label || preset.id})`
             : `正在生成实验界面... (${preset.label || preset.id})`)
           : `正在用 ${preset.label || preset.id} 补强成品质量...`);
       }
@@ -2262,7 +2262,7 @@ async function streamHtmlFromSpec(spec, onChunk, onStatus, options = {}) {
     }
   }
 
-  throw lastError || new Error('Kimi 生成失败，请稍后重试');
+  throw lastError || new Error('DeepSeek 生成失败，请稍后重试');
 }
 
 async function repairExperiment(spec, html, review) {
@@ -2296,11 +2296,11 @@ async function generateExperiment(prompt, category, onChunk, onDone, onError) {
     }
     const preset = state.modelCatalog.find((item) => item.id === 'premium' && item.available);
     if (!preset) {
-      throw new Error('当前仅支持 Kimi premium，请先配置并启用 MOONSHOT_API_KEY');
+      throw new Error('当前默认使用 DeepSeek premium，请先配置并启用 DEEPSEEK_API_KEY');
     }
-    setGeneratingStatus(`Kimi 正在生成... (${preset.label || preset.id})`);
+    setGeneratingStatus(`DeepSeek 正在生成... (${preset.label || preset.id})`);
 
-    setGeneratingStatus(`Kimi 正在生成... (${preset.label || preset.id})`);
+    setGeneratingStatus(`DeepSeek 正在生成... (${preset.label || preset.id})`);
 
     const result = await requestChat({
       preset: preset.id,
@@ -2333,7 +2333,7 @@ async function generateExperiment(prompt, category, onChunk, onDone, onError) {
       criticalIssues = getCriticalStructuralIssues(issues);
 
       if ((criticalIssues.length || !isUsableHtml(finalHtml)) && hasTargetedRepairableIssues(criticalIssues)) {
-        setGeneratingStatus('Kimi 正在修复关键语法问题...');
+        setGeneratingStatus('DeepSeek 正在修复关键语法问题...');
         finalHtml = await repairDirectExperiment(prompt, category, finalHtml, criticalIssues, null, onChunk);
         finalHtml = applyBasicHtmlFixes(finalHtml);
         issues = findHtmlStructuralIssues(finalHtml, prompt, category);
@@ -2634,7 +2634,7 @@ async function handleIssueRepair() {
   const originalText = repairBtn.innerHTML;
   repairBtn.disabled = true;
   repairBtn.innerHTML = '修复中...';
-  setGeneratingStatus('Kimi 正在修复异常...');
+  setGeneratingStatus('DeepSeek 正在修复异常...');
 
   try {
     const repairedHtml = await repairDirectExperiment(
@@ -2868,7 +2868,7 @@ async function handleGenerate() {
       state.lastGenerationDraft = content;
       chunkCount++;
       if (chunkCount % 8 === 0) {
-        setGeneratingStatus(`Kimi 正在生成... 已输出 ${content.length} 字符`);
+        setGeneratingStatus(`DeepSeek 正在生成... 已输出 ${content.length} 字符`);
       }
     },
     (code, meta) => {
@@ -2952,7 +2952,7 @@ function showGeneratingState(source = getEffectiveGenerationPrompt().source) {
   document.getElementById('generating-state').classList.remove('hidden');
   document.getElementById('preview-iframe').classList.add('hidden');
   document.getElementById('code-view').classList.add('hidden');
-  setGeneratingStatus(source === 'optimized' ? 'Kimi 正在按优化后的提示词生成...' : 'Kimi 正在生成...');
+  setGeneratingStatus(source === 'optimized' ? 'DeepSeek 正在按优化后的提示词生成...' : 'DeepSeek 正在生成...');
 }
 
 function showPreview(code) {
