@@ -32,7 +32,6 @@ const MODEL_PRESETS = {
     model: process.env.DEEPSEEK_QUICK_MODEL || 'deepseek-v4-flash',
     defaults: {
       thinking: { type: 'disabled' },
-      reasoning_effort: 'high',
       temperature: 0.45,
       top_p: 0.85,
     },
@@ -243,16 +242,22 @@ app.post('/api/chat', async (req, res) => {
     }
 
     if (selected.provider === 'deepseek') {
-      if (thinking && typeof thinking === 'object') {
-        payload.thinking = thinking;
-      } else if (selected.defaults?.thinking) {
-        payload.thinking = selected.defaults.thinking;
+      const resolvedThinking = thinking && typeof thinking === 'object'
+        ? thinking
+        : selected.defaults?.thinking;
+
+      if (resolvedThinking && typeof resolvedThinking === 'object') {
+        payload.thinking = resolvedThinking;
       }
 
-      if (reasoning_effort) {
-        payload.reasoning_effort = reasoning_effort;
-      } else if (selected.defaults?.reasoning_effort) {
-        payload.reasoning_effort = selected.defaults.reasoning_effort;
+      const thinkingEnabled = payload.thinking?.type !== 'disabled';
+      if (thinking && typeof thinking === 'object') {
+        payload.thinking = thinking;
+      }
+
+      const resolvedReasoningEffort = reasoning_effort || selected.defaults?.reasoning_effort;
+      if (thinkingEnabled && resolvedReasoningEffort) {
+        payload.reasoning_effort = resolvedReasoningEffort;
       }
     }
 
