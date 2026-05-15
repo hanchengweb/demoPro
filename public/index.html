@@ -693,12 +693,14 @@ async function generateExperiment(prompt, category, onChunk, onDone, onError) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'glm-4-flash',
+        preset: 'premium',
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: `${categoryHint}\n\n用户需求：${prompt}\n\n请生成完整的单文件 HTML 虚拟仿真实验代码。` }
         ],
-        stream: true
+        stream: true,
+        temperature: 0.55,
+        max_tokens: 12000
       }),
       signal: controller.signal
     });
@@ -1069,12 +1071,14 @@ async function handleOptimizePrompt() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'glm-4-flash',
+        preset: 'premium',
         messages: [
           { role: 'system', content: '你是一个虚拟仿真实验设计专家。你的任务是将用户简单的实验描述扩展成一个详细、专业的实验设计提示词。包含：实验目的、具体功能需求、交互参数、可视化要求等。输出纯文本，不要markdown格式。' },
           { role: 'user', content: `${categoryHint}用户想做的实验："${input}"\n\n请将其扩展成一个详细的实验设计提示词，用于生成完整的交互式虚拟仿真实验。要求具体、专业、可操作。` }
         ],
-        stream: false
+        stream: false,
+        temperature: 0.45,
+        max_tokens: 2800
       })
     });
     
@@ -1116,7 +1120,7 @@ function handleGenerate() {
     (content) => {
       chunkCount++;
       if (chunkCount % 5 === 0) {
-        document.getElementById('generating-status').textContent = `已接收 ${content.length} 字符...`;
+        document.getElementById('generating-status').textContent = `DeepSeek 已输出 ${content.length} 字符...`;
       }
     },
     (code) => {
@@ -1140,7 +1144,7 @@ function handleGenerate() {
       state.isGenerating = false;
       updateGenerateButton(false);
       showEmptyState();
-      alert('生成失败: ' + error);
+      alert('生成失败：' + error);
     }
   );
 }
